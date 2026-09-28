@@ -1,0 +1,174 @@
+// Esquema de base de datos para wf_grocery_pos (mini-ERP para tienda de abarrotes).
+// Pegar este archivo en https://dbdiagram.io para visualizar el diagrama ER.
+
+Enum user_role {
+  admin
+  cashier
+}
+
+Enum payment_method {
+  cash
+  card
+  credit
+}
+
+Enum cash_movement_type {
+  sale
+  deposit
+  withdrawal
+}
+
+Enum promotion_type {
+  percentage
+  fixed_amount
+  fixed_price
+  bogo
+}
+
+Enum promotion_scope {
+  all
+  category
+  product
+}
+
+Enum account_movement_type {
+  charge
+  payment
+}
+
+Table users {
+  id integer [pk, increment]
+  name varchar
+  email varchar [unique]
+  password_hash varchar
+  role user_role [default: 'cashier']
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+Table categories {
+  id integer [pk, increment]
+  name varchar [unique]
+}
+
+Table products {
+  id integer [pk, increment]
+  category_id integer [ref: > categories.id]
+  name varchar
+  barcode varchar [unique, null]
+  unit varchar [note: 'pieza | kg | paquete | litro']
+  price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado)']
+  cost decimal(10,2) [note: 'costo VIGENTE (denormalizado)']
+  stock integer [default: 0]
+  min_stock integer [default: 5]
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
+}
+
+Table product_price_history {
+  id integer [pk, increment]
+  product_id integer [ref: > products.id]
+  price decimal(10,2)
+  cost decimal(10,2)
+  effective_from timestamp [default: `now()`]
+  changed_by integer [ref: > users.id, null]
+  reason varchar [null]
+
+  Note: 'Registro append-only: cada cambio de precio/costo inserta una fila nueva'
+}
+
+Table promotions {
+  id integer [pk, increment]
+  name varchar
+  type promotion_type
+  value decimal(10,2) [null, note: '% o monto fijo, según type']
+  buy_quantity integer [null, note: 'para bogo: compra X']
+  pay_quantity integer [null, note: 'para bogo: paga Y']
+  scope promotion_scope
+  starts_at timestamp
+  ends_at timestamp
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+Table promotion_products {
+  promotion_id integer [ref: > promotions.id]
+  product_id integer [ref: > products.id]
+
+  indexes {
+    (promotion_id, product_id) [pk]
+  }
+}
+
+Table promotion_categories {
+  promotion_id integer [ref: > promotions.id]
+  category_id integer [ref: > categories.id]
+
+  indexes {
+    (promotion_id, category_id) [pk]
+  }
+}
+
+Table customers {
+  id integer [pk, increment]
+  name varchar
+  phone varchar [null]
+  email varchar [null]
+  balance decimal(10,2) [default: 0, note: 'saldo fiado, denormalizado']
+  created_at timestamp [default: `now()`]
+}
+
+Table customer_account_movements {
+  id integer [pk, increment]
+  customer_id integer [ref: > customers.id]
+  type account_movement_type
+  amount decimal(10,2)
+  note varchar [null]
+  sale_id integer [ref: > sales.id, null]
+  created_at timestamp [default: `now()`]
+}
+
+Table cash_sessions {
+  id integer [pk, increment]
+  opened_by integer [ref: > users.id]
+  closed_by integer [ref: > users.id, null]
+  opening_amount decimal(10,2)
+  closing_counted_amount decimal(10,2) [null]
+  opened_at timestamp [default: `now()`]
+  closed_at timestamp [null]
+}
+
+Table cash_movements {
+  id integer [pk, increment]
+  cash_session_id integer [ref: > cash_sessions.id]
+  type cash_movement_type
+  amount decimal(10,2)
+  note varchar
+  sale_id integer [ref: > sales.id, null]
+  created_at timestamp [default: `now()`]
+}
+
+Table sales {
+  id integer [pk, increment]
+  cash_session_id integer [ref: > cash_sessions.id]
+  customer_id integer [ref: > customers.id, null]
+  user_id integer [ref: > users.id]
+  payment_method payment_method
+  subtotal decimal(10,2)
+  discount_total decimal(10,2) [default: 0]
+  total decimal(10,2)
+  created_at timestamp [default: `now()`]
+}
+
+Table sale_items {
+  id integer [pk, increment]
+  sale_id integer [ref: > sales.id]
+  product_id integer [ref: > products.id]
+  promotion_id integer [ref: > promotions.id, null]
+  product_name varchar [note: 'snapshot histórico del nombre']
+  quantity integer
+  unit_price decimal(10,2) [note: 'precio unitario ANTES de descuento, snapshot histórico']
+  discount_amount decimal(10,2) [default: 0]
+  subtotal decimal(10,2) [note: 'quantity * unit_price - discount_amount']
+}

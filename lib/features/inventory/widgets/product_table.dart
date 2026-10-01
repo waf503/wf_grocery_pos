@@ -27,10 +27,11 @@ class ProductTable extends StatelessWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),
         child: ConstrainedBox(
-          constraints: const BoxConstraints(minWidth: 640),
+          constraints: const BoxConstraints(minWidth: 720),
           child: DataTable(
             columns: const [
               DataColumn(label: Text('Producto')),
+              DataColumn(label: Text('Presentación')),
               DataColumn(label: Text('Categoría')),
               DataColumn(label: Text('Precio'), numeric: true),
               DataColumn(label: Text('Costo'), numeric: true),
@@ -41,7 +42,8 @@ class ProductTable extends StatelessWidget {
               for (final product in products)
                 DataRow(
                   cells: [
-                    DataCell(Text(product.name)),
+                    DataCell(Text(product.familyName)),
+                    DataCell(Text(product.presentation)),
                     DataCell(Text(product.category)),
                     DataCell(Text(formatCurrency(product.price))),
                     DataCell(Text(formatCurrency(product.cost))),
@@ -49,7 +51,7 @@ class ProductTable extends StatelessWidget {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Text('${product.stock} ${product.unit}'),
+                          Text('${_formatQty(product.stock)} ${product.unit}'),
                           if (product.isLowStock) ...[
                             const SizedBox(width: 6),
                             Icon(Icons.warning_amber_rounded, size: 16, color: scheme.error),
@@ -82,4 +84,11 @@ class ProductTable extends StatelessWidget {
       ),
     );
   }
+}
+
+/// El stock ahora es `double` (para permitir kg fraccionarios), pero se ve
+/// feo mostrar "40.0 pieza" cuando es un número entero — esto recorta el
+/// ".0" solo cuando no hay parte decimal real.
+String _formatQty(double value) {
+  return value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
 }

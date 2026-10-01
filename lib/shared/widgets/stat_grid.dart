@@ -17,7 +17,7 @@ class StatGrid extends StatelessWidget {
         maxCrossAxisExtent: 220,
         mainAxisSpacing: 12,
         crossAxisSpacing: 12,
-        mainAxisExtent: 164,
+        mainAxisExtent: 188,
       ),
       itemCount: children.length,
       itemBuilder: (context, index) => children[index],

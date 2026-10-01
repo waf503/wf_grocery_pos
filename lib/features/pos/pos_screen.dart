@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/mock_data.dart';
 import '../../models/sale.dart';
 import '../../state/cash_provider.dart';
+import '../../state/category_provider.dart';
 import '../../state/customer_provider.dart';
 import '../../state/inventory_provider.dart';
 import '../../state/pos_provider.dart';
@@ -82,7 +82,7 @@ class _PosScreenState extends State<PosScreen> {
     context.read<SalesProvider>().addSale(sale);
     final inventory = context.read<InventoryProvider>();
     for (final item in pos.cart) {
-      inventory.decreaseStock(item.product.id, item.quantity);
+      inventory.decreaseStock(item.product.id, item.quantity.toDouble());
     }
     cash.registerSale(total, note: 'Venta ${sale.id}');
     if (method == PaymentMethod.credit && pos.selectedCustomerId != null) {
@@ -97,6 +97,7 @@ class _PosScreenState extends State<PosScreen> {
   @override
   Widget build(BuildContext context) {
     final inventory = context.watch<InventoryProvider>();
+    final categoryProvider = context.watch<CategoryProvider>();
     final products = inventory.search(query: _query, category: _category);
 
     return Scaffold(
@@ -123,7 +124,7 @@ class _PosScreenState extends State<PosScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
-                      for (final cat in ['Todas', ...productCategories])
+                      for (final cat in ['Todas', ...categoryProvider.flatIndented.map((c) => c.name)])
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(

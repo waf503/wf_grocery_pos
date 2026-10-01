@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../data/mock_data.dart';
 import '../../models/product.dart';
+import '../../state/category_provider.dart';
 import '../../state/inventory_provider.dart';
 import '../../shared/widgets/section_header.dart';
 import 'widgets/product_form_dialog.dart';
@@ -19,14 +19,49 @@ class _InventoryScreenState extends State<InventoryScreen> {
   String _query = '';
   String _category = 'Todas';
 
-  Future<void> _addProduct(InventoryProvider inventory) async {
-    final product = await showProductFormDialog(context, nextId: inventory.nextId);
-    if (product != null) inventory.addProduct(product);
+  Future<void> _addProduct(InventoryProvider inventory, CategoryProvider categories) async {
+    final result = await showProductFormDialog(
+      context,
+      families: inventory.families,
+      categories: categories.flatIndented,
+    );
+    if (result == null) return;
+    await inventory.addProduct(
+      familyName: result.familyName,
+      categoryId: result.categoryId,
+      presentation: result.presentation,
+      unit: result.unit,
+      price: result.price,
+      cost: result.cost,
+      stock: result.stock,
+      minStock: result.minStock,
+      barcode: result.barcode,
+    );
   }
 
-  Future<void> _editProduct(InventoryProvider inventory, Product product) async {
-    final updated = await showProductFormDialog(context, existing: product, nextId: inventory.nextId);
-    if (updated != null) inventory.updateProduct(updated);
+  Future<void> _editProduct(
+    InventoryProvider inventory,
+    CategoryProvider categories,
+    Product product,
+  ) async {
+    final result = await showProductFormDialog(
+      context,
+      families: inventory.families,
+      categories: categories.flatIndented,
+      existing: product,
+    );
+    if (result == null) return;
+    await inventory.updateProduct(
+      product.copyWith(
+        presentation: result.presentation,
+        unit: result.unit,
+        price: result.price,
+        cost: result.cost,
+        stock: result.stock,
+        minStock: result.minStock,
+        barcode: result.barcode,
+      ),
+    );
   }
 
   Future<void> _deleteProduct(InventoryProvider inventory, Product product) async {
@@ -45,12 +80,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
         ],
       ),
     );
-    if (confirmed == true) inventory.deleteProduct(product.id);
+    if (confirmed == true) await inventory.deleteProduct(product.id);
   }
 
   @override
   Widget build(BuildContext context) {
     final inventory = context.watch<InventoryProvider>();
+    final categoryProvider = context.watch<CategoryProvider>();
     final products = inventory.search(query: _query, category: _category);
 
     return Padding(
@@ -60,10 +96,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
         children: [
           SectionHeader(
             title: 'Inventario',
-            subtitle: '${inventory.products.length} productos registrados',
+            subtitle: '${inventory.products.length} presentaciones registradas',
             actions: [
               FilledButton.icon(
-                onPressed: () => _addProduct(inventory),
+                onPressed: () => _addProduct(inventory, categoryProvider),
                 icon: const Icon(Icons.add),
                 label: const Text('Nuevo producto'),
               ),
@@ -88,7 +124,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   initialValue: _category,
                   decoration: const InputDecoration(labelText: 'Categoría'),
                   items: [
-                    for (final c in ['Todas', ...productCategories]) DropdownMenuItem(value: c, child: Text(c)),
+                    const DropdownMenuItem(value: 'Todas', child: Text('Todas')),
+                    for (final c in categoryProvider.flatIndented)
+                      DropdownMenuItem(
+                        value: c.name,
+                        child: Text('${'—  ' * categoryProvider.depthOf(c)}${c.name}'),
+                      ),
                   ],
                   onChanged: (value) => setState(() => _category = value!),
                 ),
@@ -99,7 +140,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
           Expanded(
             child: ProductTable(
               products: products,
-              onEdit: (p) => _editProduct(inventory, p),
+              onEdit: (p) => _editProduct(inventory, categoryProvider, p),
               onDelete: (p) => _deleteProduct(inventory, p),
             ),
           ),

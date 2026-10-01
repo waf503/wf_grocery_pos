@@ -1,9 +1,14 @@
-// Esquema de base de datos para wf_grocery_pos (mini-ERP para tienda de abarrotes).
+// ============================================================
+// wf_grocery_pos — Esquema de base de datos (SaaS multi-tenant)
 // Pegar este archivo en https://dbdiagram.io para visualizar el diagrama ER.
+// ============================================================
 
-Enum user_role {
-  admin
-  cashier
+Enum subscription_status {
+  trialing
+  active
+  past_due
+  canceled
+  incomplete
 }
 
 Enum payment_method {
@@ -36,53 +41,279 @@ Enum account_movement_type {
   payment
 }
 
-Table users {
-  id integer [pk, increment]
+Enum price_history_source {
+  purchase
+  manual
+}
+
+Enum price_update_policy {
+  immediate
+  deplete_first
+}
+
+Enum inventory_movement_type {
+  purchase_in
+  sale_out
+  adjustment_in
+  adjustment_out
+  transfer_in
+  transfer_out
+}
+
+// ------------------------------------------------------------
+// SaaS: planes, cuentas (tenants) y suscripciones
+// ------------------------------------------------------------
+
+Table plans {
+  id uuid [pk]
   name varchar
-  email varchar [unique]
-  password_hash varchar
-  role user_role [default: 'cashier']
-  active boolean [default: true]
+  price_cents integer [note: 'en centavos: convencion estandar de pasarelas de pago (Stripe)']
+  billing_interval varchar [note: 'monthly | yearly']
+  max_stores integer [null, note: 'limite de sucursales; null = ilimitado']
+  features json [null]
   created_at timestamp [default: `now()`]
 }
 
-Table categories {
-  id integer [pk, increment]
-  name varchar [unique]
-}
-
-Table products {
-  id integer [pk, increment]
-  category_id integer [ref: > categories.id]
+Table tenants {
+  id uuid [pk]
   name varchar
-  barcode varchar [unique, null]
-  unit varchar [note: 'pieza | kg | paquete | litro']
-  price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado)']
-  cost decimal(10,2) [note: 'costo VIGENTE (denormalizado)']
-  stock integer [default: 0]
-  min_stock integer [default: 5]
-  active boolean [default: true]
+  slug varchar [unique]
+  billing_email varchar
   created_at timestamp [default: `now()`]
   updated_at timestamp [null]
 }
 
-Table product_price_history {
-  id integer [pk, increment]
-  product_id integer [ref: > products.id]
-  price decimal(10,2)
-  cost decimal(10,2)
-  effective_from timestamp [default: `now()`]
-  changed_by integer [ref: > users.id, null]
-  reason varchar [null]
-
-  Note: 'Registro append-only: cada cambio de precio/costo inserta una fila nueva'
+Table subscriptions {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  plan_id uuid [ref: > plans.id]
+  status subscription_status
+  trial_ends_at timestamp [null]
+  current_period_end timestamp [null]
+  stripe_customer_id varchar [null]
+  stripe_subscription_id varchar [null]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
 }
 
+// ------------------------------------------------------------
+// Estructura del negocio: sucursales y ubicaciones fisicas
+// ------------------------------------------------------------
+
+Table stores {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar
+  address varchar [null]
+  currency varchar [default: 'USD', note: 'ISO 4217']
+  timezone varchar [default: 'America/El_Salvador']
+  price_update_policy price_update_policy [default: 'immediate', note: 'cuando sube el costo: sugiere precio nuevo de inmediato o hasta agotar el lote viejo']
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+}
+
+Table locations {
+  id uuid [pk]
+  store_id uuid [ref: > stores.id]
+  name varchar [note: 'ej. Pasillo 3 - Anaquel B, Bodega, Refrigerador 1']
+  created_at timestamp [default: `now()`]
+}
+
+// ------------------------------------------------------------
+// Identidad, roles y auditoria
+// ------------------------------------------------------------
+
+Table roles {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id, null, note: 'null = rol predefinido del sistema (admin, cajero)']
+  name varchar
+  created_at timestamp [default: `now()`]
+}
+
+Table permissions {
+  id uuid [pk]
+  code varchar [unique, note: 'ej. products.edit, sales.void, cash.close']
+  description varchar
+}
+
+Table role_permissions {
+  role_id uuid [ref: > roles.id]
+  permission_id uuid [ref: > permissions.id]
+
+  indexes {
+    (role_id, permission_id) [pk]
+  }
+}
+
+Table users {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id, null, note: 'null = acceso a todas las sucursales del tenant']
+  role_id uuid [ref: > roles.id]
+  name varchar
+  email varchar [unique]
+  password_hash varchar
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+}
+
+Table audit_log {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  user_id uuid [ref: > users.id, null]
+  action varchar [note: 'ej. product.updated, cash_session.closed']
+  entity_type varchar
+  entity_id uuid
+  changes json [null, note: 'diff antes/despues']
+  created_at timestamp [default: `now()`]
+}
+
+// ------------------------------------------------------------
+// Catalogo
+// ------------------------------------------------------------
+
+Table categories {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar
+  description varchar [null]
+  parent_id uuid [ref: > categories.id, null, note: 'autoreferencia: permite anidar categorias (ej. Gaseosas dentro de Bebidas)']
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+}
+
+Table suppliers {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar
+  contact_phone varchar [null]
+  notes varchar [null, note: 'para proveedores informales sin registro formal, ej. mercado central']
+  created_at timestamp [default: `now()`]
+}
+
+Table products {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  category_id uuid [ref: > categories.id]
+  name varchar [note: 'el concepto general, ej. "Coca-Cola" — sin presentacion']
+  brand varchar [null]
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  Note: 'Producto = la idea general. Cada presentacion vendible vive en product_variants.'
+}
+
+Table product_variants {
+  id uuid [pk]
+  product_id uuid [ref: > products.id]
+  location_id uuid [ref: > locations.id, null]
+  presentation varchar [note: 'ej. Lata 355ml, Botella 600ml, 2L, Fardo 24pz']
+  barcode varchar [null]
+  unit varchar [note: 'pieza | kg | paquete | litro']
+  price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado)']
+  cost decimal(10,2) [note: 'costo promedio ponderado VIGENTE (denormalizado)']
+  target_margin_pct decimal(5,2) [null, note: 'margen objetivo: sugiere precio nuevo cuando cambia el costo']
+  stock decimal(10,3) [default: 0, note: 'decimal para permitir productos vendidos por kg']
+  min_stock decimal(10,3) [default: 5]
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+  updated_at timestamp [null]
+  deleted_at timestamp [null]
+
+  Note: 'Esta es la unidad REAL que se vende y se cuenta en inventario (el SKU).'
+}
+
+Table combos {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  name varchar [note: 'ej. "Pack Coca-Cola 6 latas" — buscable/escaneable como si fuera un producto']
+  variant_id uuid [ref: > product_variants.id, note: 'que variante representa realmente']
+  quantity_multiplier decimal(10,3) [note: 'cuantas unidades de esa variante equivale, ej. 6']
+  combo_price decimal(10,2) [note: 'precio de venta del combo completo (normalmente con descuento vs comprar suelto)']
+  barcode varchar [null, note: 'si el pack sellado trae su propio codigo de barras fisico']
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+
+  Note: 'El combo NO tiene stock propio: vender 1 combo descuenta quantity_multiplier unidades del stock de variant_id.'
+}
+
+Table product_price_history {
+  id uuid [pk]
+  variant_id uuid [ref: > product_variants.id]
+  price decimal(10,2)
+  cost decimal(10,2)
+  source price_history_source
+  purchase_id uuid [ref: > purchases.id, null]
+  changed_by uuid [ref: > users.id, null]
+  effective_from timestamp [default: `now()`]
+  reason varchar [null]
+
+  Note: 'Append-only: cada cambio de precio/costo (por compra o manual) inserta una fila nueva'
+}
+
+// ------------------------------------------------------------
+// Compras / recoleccion de mercancia (fuente de variacion de costo)
+// ------------------------------------------------------------
+
+Table purchases {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  supplier_id uuid [ref: > suppliers.id, null]
+  user_id uuid [ref: > users.id, note: 'quien realizo la compra']
+  purchase_date timestamp [default: `now()`]
+  total decimal(10,2)
+  notes varchar [null]
+  created_at timestamp [default: `now()`]
+}
+
+Table purchase_items {
+  id uuid [pk]
+  purchase_id uuid [ref: > purchases.id]
+  variant_id uuid [ref: > product_variants.id]
+  quantity decimal(10,3)
+  unit_cost decimal(10,2) [note: 'costo de ESTA compra especifica; puede variar de la anterior']
+  subtotal decimal(10,2)
+}
+
+// ------------------------------------------------------------
+// Kardex: historial de movimientos de inventario
+// ------------------------------------------------------------
+
+Table inventory_movements {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  variant_id uuid [ref: > product_variants.id]
+  type inventory_movement_type
+  quantity decimal(10,3)
+  unit_cost decimal(10,2) [note: 'costo promedio ponderado al momento del movimiento']
+  balance_after decimal(10,3) [note: 'saldo resultante (tarjeta kardex)']
+  reference_type varchar [null, note: 'purchase | sale | manual']
+  reference_id uuid [null]
+  user_id uuid [ref: > users.id, null]
+  created_at timestamp [default: `now()`]
+}
+
+// ------------------------------------------------------------
+// Promociones
+// ------------------------------------------------------------
+
 Table promotions {
-  id integer [pk, increment]
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
   name varchar
   type promotion_type
-  value decimal(10,2) [null, note: '% o monto fijo, según type']
+  value decimal(10,2) [null, note: '% o monto fijo, segun type']
   buy_quantity integer [null, note: 'para bogo: compra X']
   pay_quantity integer [null, note: 'para bogo: paga Y']
   scope promotion_scope
@@ -93,46 +324,59 @@ Table promotions {
 }
 
 Table promotion_products {
-  promotion_id integer [ref: > promotions.id]
-  product_id integer [ref: > products.id]
+  promotion_id uuid [ref: > promotions.id]
+  variant_id uuid [ref: > product_variants.id]
 
   indexes {
-    (promotion_id, product_id) [pk]
+    (promotion_id, variant_id) [pk]
   }
 }
 
 Table promotion_categories {
-  promotion_id integer [ref: > promotions.id]
-  category_id integer [ref: > categories.id]
+  promotion_id uuid [ref: > promotions.id]
+  category_id uuid [ref: > categories.id]
 
   indexes {
     (promotion_id, category_id) [pk]
   }
 }
 
+// ------------------------------------------------------------
+// Clientes
+// ------------------------------------------------------------
+
 Table customers {
-  id integer [pk, increment]
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
   name varchar
   phone varchar [null]
   email varchar [null]
   balance decimal(10,2) [default: 0, note: 'saldo fiado, denormalizado']
   created_at timestamp [default: `now()`]
+  deleted_at timestamp [null]
 }
 
 Table customer_account_movements {
-  id integer [pk, increment]
-  customer_id integer [ref: > customers.id]
+  id uuid [pk]
+  customer_id uuid [ref: > customers.id]
   type account_movement_type
   amount decimal(10,2)
   note varchar [null]
-  sale_id integer [ref: > sales.id, null]
+  sale_id uuid [ref: > sales.id, null]
   created_at timestamp [default: `now()`]
 }
 
+// ------------------------------------------------------------
+// Caja
+// ------------------------------------------------------------
+
 Table cash_sessions {
-  id integer [pk, increment]
-  opened_by integer [ref: > users.id]
-  closed_by integer [ref: > users.id, null]
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  opened_by uuid [ref: > users.id]
+  closed_by uuid [ref: > users.id, null]
   opening_amount decimal(10,2)
   closing_counted_amount decimal(10,2) [null]
   opened_at timestamp [default: `now()`]
@@ -140,20 +384,26 @@ Table cash_sessions {
 }
 
 Table cash_movements {
-  id integer [pk, increment]
-  cash_session_id integer [ref: > cash_sessions.id]
+  id uuid [pk]
+  cash_session_id uuid [ref: > cash_sessions.id]
   type cash_movement_type
   amount decimal(10,2)
   note varchar
-  sale_id integer [ref: > sales.id, null]
+  sale_id uuid [ref: > sales.id, null]
   created_at timestamp [default: `now()`]
 }
 
+// ------------------------------------------------------------
+// Ventas
+// ------------------------------------------------------------
+
 Table sales {
-  id integer [pk, increment]
-  cash_session_id integer [ref: > cash_sessions.id]
-  customer_id integer [ref: > customers.id, null]
-  user_id integer [ref: > users.id]
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  store_id uuid [ref: > stores.id]
+  cash_session_id uuid [ref: > cash_sessions.id]
+  customer_id uuid [ref: > customers.id, null]
+  user_id uuid [ref: > users.id]
   payment_method payment_method
   subtotal decimal(10,2)
   discount_total decimal(10,2) [default: 0]
@@ -162,13 +412,14 @@ Table sales {
 }
 
 Table sale_items {
-  id integer [pk, increment]
-  sale_id integer [ref: > sales.id]
-  product_id integer [ref: > products.id]
-  promotion_id integer [ref: > promotions.id, null]
-  product_name varchar [note: 'snapshot histórico del nombre']
-  quantity integer
-  unit_price decimal(10,2) [note: 'precio unitario ANTES de descuento, snapshot histórico']
+  id uuid [pk]
+  sale_id uuid [ref: > sales.id]
+  variant_id uuid [ref: > product_variants.id]
+  promotion_id uuid [ref: > promotions.id, null]
+  combo_id uuid [ref: > combos.id, null, note: 'si se vendio como combo/pack; el stock siempre se descuenta de variant_id']
+  product_name varchar [note: 'snapshot historico del nombre (incluye presentacion o nombre del combo)']
+  quantity decimal(10,3) [note: 'unidades REALES de la variante, ya multiplicadas si vino de un combo']
+  unit_price decimal(10,2) [note: 'precio unitario ANTES de descuento, snapshot historico']
   discount_amount decimal(10,2) [default: 0]
   subtotal decimal(10,2) [note: 'quantity * unit_price - discount_amount']
 }

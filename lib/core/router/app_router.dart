@@ -1,5 +1,6 @@
 import 'package:go_router/go_router.dart';
 
+import '../../features/categories/categories_screen.dart';
 import '../../features/cash/cash_screen.dart';
 import '../../features/customers/customers_screen.dart';
 import '../../features/dashboard/dashboard_screen.dart';
@@ -22,6 +23,9 @@ final GoRouter appRouter = GoRouter(
         ]),
         StatefulShellBranch(routes: [
           GoRoute(path: '/inventory', builder: (context, state) => const InventoryScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(path: '/categories', builder: (context, state) => const CategoriesScreen()),
         ]),
         StatefulShellBranch(routes: [
           GoRoute(path: '/customers', builder: (context, state) => const CustomersScreen()),

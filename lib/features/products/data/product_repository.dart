@@ -1,35 +1,23 @@
 import '../../../core/database/app_database.dart';
 import '../../../models/product.dart';
-import '../../../models/product_family.dart';
 
-/// Contrato de acceso a datos para productos y sus familias.
+/// Contrato de acceso a datos para productos.
 ///
 /// El resto de la app (Provider, pantallas) programa contra ESTA interfaz,
 /// nunca contra Drift directamente. Cuando conectemos el backend de
 /// Laravel, agregaremos una `ApiProductRepository` que cumpla el mismo
 /// contrato — la UI no se enterará del cambio.
 abstract class ProductRepository {
-  /// Todas las variantes, ya combinadas con el nombre de su familia.
-  Stream<List<Product>> watchAllVariants();
+  /// Todos los productos, ya con el nombre de su categoría resuelto.
+  Stream<List<Product>> watchAll();
 
-  Stream<List<ProductFamily>> watchFamilies();
+  Future<Product?> getById(String id);
 
-  Future<Product?> getVariantById(String id);
+  Future<void> add(ProductsTableCompanion product);
 
-  /// Busca una familia por nombre (sin importar mayúsculas/minúsculas); si
-  /// no existe, la crea. Es lo que permite que escribir "Coca-Cola" dos
-  /// veces reutilice la misma familia en vez de duplicarla.
-  Future<ProductFamily> findOrCreateFamily({
-    required String name,
-    required String categoryId,
-    String? brand,
-  });
+  Future<void> update(ProductsTableCompanion product);
 
-  Future<void> addVariant(String familyId, ProductVariantsTableCompanion variant);
+  Future<void> delete(String id);
 
-  Future<void> updateVariant(ProductVariantsTableCompanion variant);
-
-  Future<void> deleteVariant(String variantId);
-
-  Future<void> decreaseStock(String variantId, double quantity);
+  Future<void> decreaseStock(String id, double quantity);
 }

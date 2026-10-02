@@ -5,10 +5,18 @@ import '../../../shared/widgets/empty_state.dart';
 import 'product_tile.dart';
 
 class ProductGrid extends StatelessWidget {
-  const ProductGrid({super.key, required this.products, required this.onSelect});
+  const ProductGrid({
+    super.key,
+    required this.products,
+    required this.onSelect,
+    required this.categoryColorFor,
+  });
 
   final List<Product> products;
   final ValueChanged<Product> onSelect;
+
+  /// Devuelve el color ARGB efectivo de una categoría (por su id).
+  final int Function(String categoryId) categoryColorFor;
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +37,11 @@ class ProductGrid extends StatelessWidget {
       itemCount: products.length,
       itemBuilder: (context, index) {
         final product = products[index];
-        return ProductTile(product: product, onTap: () => onSelect(product));
+        return ProductTile(
+          product: product,
+          categoryColor: Color(categoryColorFor(product.categoryId)),
+          onTap: () => onSelect(product),
+        );
       },
     );
   }

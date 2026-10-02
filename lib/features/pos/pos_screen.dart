@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/format/formatters.dart';
+import '../../models/product.dart';
 import '../../models/sale.dart';
+import '../../shared/widgets/feedback_alert.dart';
 import '../../state/cash_provider.dart';
 import '../../state/category_provider.dart';
 import '../../state/customer_provider.dart';
@@ -20,14 +23,95 @@ class PosScreen extends StatefulWidget {
 }
 
 class _PosScreenState extends State<PosScreen> {
-  final _searchController = TextEditingController();
+  final _scanController = TextEditingController();
+  final _scanFocus = FocusNode();
   String _query = '';
   String _category = 'Todas';
 
   @override
   void dispose() {
-    _searchController.dispose();
+    _scanController.dispose();
+    _scanFocus.dispose();
     super.dispose();
+  }
+
+  /// Un solo campo hace de buscador y de escáner. Mientras se escribe,
+  /// filtra la grilla. Al pulsar Enter (el lector de códigos lo envía solo
+  /// al terminar de teclear) se agrega al carrito si el texto identifica un
+  /// producto de forma única: un código de barras exacto, o una búsqueda que
+  /// deja un solo resultado.
+  void _onSubmit(String raw) {
+    final text = raw.trim();
+    _scanFocus.requestFocus();
+    if (text.isEmpty) return;
+
+    final inventory = context.read<InventoryProvider>();
+    Product? product;
+    for (final p in inventory.products) {
+      if (p.barcode == text) {
+        product = p;
+        break;
+      }
+    }
+    product ??= () {
+      final matches = inventory.search(query: text, category: _category);
+      return matches.length == 1 ? matches.first : null;
+    }();
+
+    if (product == null) {
+      // Un código escaneado que no existe se descarta para que el siguiente
+      // escaneo no se pegue a este; un texto de búsqueda se conserva.
+      if (RegExp(r'^\d{6,}$').hasMatch(text)) {
+        _clearField();
+        FeedbackAlert.show(
+          context,
+          type: FeedbackType.error,
+          title: 'Código no registrado',
+          message: text,
+        );
+      }
+      return;
+    }
+    _clearField();
+    _addToCart(product);
+  }
+
+  void _clearField() {
+    _scanController.clear();
+    setState(() => _query = '');
+  }
+
+  void _addToCart(Product product) {
+    final pos = context.read<PosProvider>();
+    if (product.stock <= 0) {
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.error,
+        title: 'Sin existencias',
+        message: product.name,
+      );
+      return;
+    }
+    var inCart = 0;
+    for (final item in pos.cart) {
+      if (item.product.id == product.id) inCart = item.quantity;
+    }
+    if (inCart + 1 > product.stock) {
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.warning,
+        title: 'Existencias insuficientes',
+        message: 'Solo hay ${product.stock} de ${product.name}',
+      );
+      return;
+    }
+    pos.addProduct(product);
+    FeedbackAlert.show(
+      context,
+      type: FeedbackType.success,
+      title: product.name,
+      message: '${formatCurrency(product.price)}  ·  ${inCart + 1} en el carrito',
+    );
   }
 
   Future<void> _checkout() async {
@@ -92,6 +176,7 @@ class _PosScreenState extends State<PosScreen> {
     pos.clear();
     if (!mounted) return;
     await showReceiptDialog(context, sale);
+    if (mounted) _scanFocus.requestFocus();
   }
 
   @override
@@ -110,12 +195,15 @@ class _PosScreenState extends State<PosScreen> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
                   child: TextField(
-                    controller: _searchController,
+                    controller: _scanController,
+                    focusNode: _scanFocus,
+                    autofocus: true,
                     decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.search),
-                      hintText: 'Buscar por nombre o código de barras...',
+                      prefixIcon: Icon(Icons.qr_code_scanner),
+                      hintText: 'Escanea un código o busca por nombre...',
                     ),
                     onChanged: (value) => setState(() => _query = value),
+                    onSubmitted: _onSubmit,
                   ),
                 ),
                 SizedBox(
@@ -124,13 +212,25 @@ class _PosScreenState extends State<PosScreen> {
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     children: [
-                      for (final cat in ['Todas', ...categoryProvider.flatIndented.map((c) => c.name)])
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        child: ChoiceChip(
+                          label: const Text('Todas'),
+                          selected: _category == 'Todas',
+                          onSelected: (_) => setState(() => _category = 'Todas'),
+                        ),
+                      ),
+                      for (final cat in categoryProvider.flatIndented)
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 4),
                           child: ChoiceChip(
-                            label: Text(cat),
-                            selected: _category == cat,
-                            onSelected: (_) => setState(() => _category = cat),
+                            avatar: CircleAvatar(
+                              radius: 7,
+                              backgroundColor: Color(categoryProvider.colorValueFor(cat.id)),
+                            ),
+                            label: Text(cat.name),
+                            selected: _category == cat.name,
+                            onSelected: (_) => setState(() => _category = cat.name),
                           ),
                         ),
                     ],
@@ -139,7 +239,11 @@ class _PosScreenState extends State<PosScreen> {
                 Expanded(
                   child: ProductGrid(
                     products: products,
-                    onSelect: (product) => context.read<PosProvider>().addProduct(product),
+                    categoryColorFor: categoryProvider.colorValueFor,
+                    onSelect: (product) {
+                      _addToCart(product);
+                      _scanFocus.requestFocus();
+                    },
                   ),
                 ),
               ],

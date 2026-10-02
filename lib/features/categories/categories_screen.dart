@@ -23,6 +23,7 @@ class CategoriesScreen extends StatelessWidget {
       context,
       selectableParents: _selectableParentsFor(provider, null),
       initialParentId: parentId,
+      suggestedColor: provider.nextSuggestedColor(),
     );
     if (result == null) return;
     await provider.addCategory(
@@ -30,6 +31,7 @@ class CategoriesScreen extends StatelessWidget {
       description: result.description,
       parentId: result.parentId,
       icon: result.icon,
+      color: result.color,
     );
   }
 
@@ -47,6 +49,7 @@ class CategoriesScreen extends StatelessWidget {
         description: result.description,
         parentId: result.parentId,
         icon: result.icon,
+        color: result.color,
       ),
     );
   }
@@ -168,7 +171,10 @@ class _CategoryNodeTile extends StatelessWidget {
 
     if (node.children.isEmpty) {
       return ListTile(
-        leading: Icon(iconDataFor(node.category.icon)),
+        leading: Icon(
+          iconDataFor(node.category.icon),
+          color: Color(context.read<CategoryProvider>().colorValueFor(node.category.id)),
+        ),
         title: Text(node.category.name),
         subtitle: node.category.description != null ? Text(node.category.description!) : null,
         trailing: actions,
@@ -176,7 +182,10 @@ class _CategoryNodeTile extends StatelessWidget {
     }
 
     return ExpansionTile(
-      leading: Icon(iconDataFor(node.category.icon)),
+      leading: Icon(
+          iconDataFor(node.category.icon),
+          color: Color(context.read<CategoryProvider>().colorValueFor(node.category.id)),
+        ),
       title: Text(node.category.name),
       subtitle: node.category.description != null ? Text(node.category.description!) : null,
       trailing: actions,

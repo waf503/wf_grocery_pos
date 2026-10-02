@@ -7,8 +7,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'id_generator.dart';
 import 'tables/categories_table.dart';
-import 'tables/product_variants_table.dart';
 import 'tables/products_table.dart';
+import 'tables/units_table.dart';
 
 part 'app_database.g.dart';
 
@@ -21,7 +21,7 @@ part 'app_database.g.dart';
 /// `@DriftDatabase(tables: [...])` le dice a Drift qué tablas generar código
 /// para. Cuando agreguemos el módulo de Caja, Ventas, etc., cada tabla nueva
 /// se agrega a esta lista.
-@DriftDatabase(tables: [CategoriesTable, ProductsTable, ProductVariantsTable])
+@DriftDatabase(tables: [CategoriesTable, UnitsTable, ProductsTable])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -35,7 +35,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -50,6 +50,7 @@ class AppDatabase extends _$AppDatabase {
           // datos (m.addColumn, m.createTable puntuales, etc.).
           await m.deleteTable('product_variants');
           await m.deleteTable('products');
+          await m.deleteTable('units');
           await m.deleteTable('categories');
           await m.createAll();
         },

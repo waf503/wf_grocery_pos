@@ -2,7 +2,6 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../models/product.dart';
-import '../../../models/product_family.dart';
 import 'product_repository.dart';
 
 class DriftProductRepository implements ProductRepository {
@@ -10,141 +9,88 @@ class DriftProductRepository implements ProductRepository {
 
   final AppDatabase _db;
 
-  /// Los tres joins que arman un `Product` aplanado se repiten en dos
-  /// métodos (`watchAllVariants` y `getVariantById`) — factorizados aquí
-  /// para no duplicar la misma cadena de `join([...])` dos veces.
-  ///
-  /// El tipo de retorno explícito importa: usar `dynamic` aquí compila
-  /// sin quejarse, pero rompe en tiempo de EJECUCIÓN (el `.map()` de más
-  /// abajo deja de saber a qué tipo convertir el Stream). Ya nos pasó.
-  JoinedSelectStatement<HasResultSet, dynamic> _variantJoin() {
-    return _db.select(_db.productVariantsTable).join([
-      innerJoin(
-        _db.productsTable,
-        _db.productsTable.id.equalsExp(_db.productVariantsTable.productId),
-      ),
+  /// Join con categorías para traer el nombre de la categoría junto a cada
+  /// producto. El tipo de retorno explícito importa: con `dynamic` compila
+  /// pero rompe en tiempo de ejecución al mapear el Stream.
+  JoinedSelectStatement<HasResultSet, dynamic> _productJoin() {
+    return _db.select(_db.productsTable).join([
       innerJoin(
         _db.categoriesTable,
         _db.categoriesTable.id.equalsExp(_db.productsTable.categoryId),
+      ),
+      innerJoin(
+        _db.unitsTable,
+        _db.unitsTable.id.equalsExp(_db.productsTable.unitId),
       ),
     ]);
   }
 
   @override
-  Stream<List<Product>> watchAllVariants() {
-    return _variantJoin().watch().map((rows) {
-      return rows.map((row) {
-        return _toModel(
-          row.readTable(_db.productVariantsTable),
-          row.readTable(_db.productsTable),
-          row.readTable(_db.categoriesTable),
-        );
-      }).toList();
+  Stream<List<Product>> watchAll() {
+    return _productJoin().watch().map((rows) {
+      return rows.map(_rowToModel).toList();
     });
   }
 
   @override
-  Stream<List<ProductFamily>> watchFamilies() {
-    return _db.select(_db.productsTable).watch().map(
-          (rows) => rows.map(_familyToModel).toList(),
-        );
-  }
-
-  @override
-  Future<Product?> getVariantById(String id) async {
-    final query = _variantJoin()..where(_db.productVariantsTable.id.equals(id));
+  Future<Product?> getById(String id) async {
+    final query = _productJoin()..where(_db.productsTable.id.equals(id));
     final row = await query.getSingleOrNull();
     if (row == null) return null;
-    return _toModel(
-      row.readTable(_db.productVariantsTable),
-      row.readTable(_db.productsTable),
-      row.readTable(_db.categoriesTable),
-    );
+    return _rowToModel(row);
   }
 
   @override
-  Future<ProductFamily> findOrCreateFamily({
-    required String name,
-    required String categoryId,
-    String? brand,
-  }) async {
-    final normalized = name.trim();
-    final existing = await (_db.select(_db.productsTable)
-          ..where((row) => row.name.lower().equals(normalized.toLowerCase())))
-        .getSingleOrNull();
-    if (existing != null) return _familyToModel(existing);
-
-    final inserted = await _db.into(_db.productsTable).insertReturning(
-          ProductsTableCompanion.insert(
-            name: normalized,
-            categoryId: categoryId,
-            brand: Value(brand),
-          ),
-        );
-    return _familyToModel(inserted);
+  Future<void> add(ProductsTableCompanion product) {
+    return _db.into(_db.productsTable).insert(product);
   }
 
   @override
-  Future<void> addVariant(String familyId, ProductVariantsTableCompanion variant) {
-    return _db.into(_db.productVariantsTable).insert(
-          variant.copyWith(productId: Value(familyId)),
-        );
+  Future<void> update(ProductsTableCompanion product) {
+    return (_db.update(_db.productsTable)..where((row) => row.id.equals(product.id.value)))
+        .write(product);
   }
 
   @override
-  Future<void> updateVariant(ProductVariantsTableCompanion variant) {
-    return (_db.update(_db.productVariantsTable)
-          ..where((row) => row.id.equals(variant.id.value)))
-        .write(variant);
+  Future<void> delete(String id) {
+    return (_db.delete(_db.productsTable)..where((row) => row.id.equals(id))).go();
   }
 
   @override
-  Future<void> deleteVariant(String variantId) {
-    return (_db.delete(_db.productVariantsTable)
-          ..where((row) => row.id.equals(variantId)))
-        .go();
-  }
-
-  @override
-  Future<void> decreaseStock(String variantId, double quantity) async {
-    final product = await getVariantById(variantId);
+  Future<void> decreaseStock(String id, double quantity) async {
+    final product = await getById(id);
     if (product == null) return;
-    await updateVariant(
-      ProductVariantsTableCompanion(
-        id: Value(variantId),
+    await update(
+      ProductsTableCompanion(
+        id: Value(id),
         stock: Value(product.stock - quantity),
       ),
     );
   }
 
-  Product _toModel(
-    ProductVariantsTableData variant,
-    ProductsTableData family,
-    CategoriesTableData category,
-  ) {
-    return Product(
-      id: variant.id,
-      familyId: family.id,
-      familyName: family.name,
-      presentation: variant.presentation,
-      name: '${family.name} — ${variant.presentation}',
-      categoryId: category.id,
-      category: category.name,
-      unit: variant.unit,
-      price: variant.price,
-      cost: variant.cost,
-      stock: variant.stock,
-      minStock: variant.minStock,
-      barcode: variant.barcode,
-    );
+  Product _rowToModel(TypedResult row) {
+    final product = row.readTable(_db.productsTable);
+    final category = row.readTable(_db.categoriesTable);
+    final unit = row.readTable(_db.unitsTable);
+    return _toModel(product, category, unit);
   }
 
-  ProductFamily _familyToModel(ProductsTableData row) {
-    return ProductFamily(
+  Product _toModel(ProductsTableData row, CategoriesTableData category, UnitsTableData unit) {
+    final abbreviation = unit.abbreviation;
+    return Product(
       id: row.id,
       name: row.name,
-      categoryId: row.categoryId,
-      brand: row.brand,
+      categoryId: category.id,
+      category: category.name,
+      unitId: unit.id,
+      unit: (abbreviation != null && abbreviation.isNotEmpty) ? abbreviation : unit.name,
+      allowsDecimals: unit.allowsDecimals,
+      price: row.price,
+      cost: row.cost,
+      stock: row.stock,
+      minStock: row.minStock,
+      barcode: row.barcode,
+      tags: row.tags,
     );
   }
 }

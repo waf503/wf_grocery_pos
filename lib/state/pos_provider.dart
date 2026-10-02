@@ -7,8 +7,19 @@ class PosProvider extends ChangeNotifier {
   final List<CartItem> _cart = [];
   String? _selectedCustomerId;
 
+  /// Producto "activo": el último cuya cantidad se tocó (agregar, + o −).
+  /// El carrito lo colorea con el color de su categoría como feedback. Es
+  /// nulo si ese renglón se eliminó o el carrito se vació.
+  ///
+  /// `_addSerial` sube solo con `addProduct` y sirve para hacer scroll hasta
+  /// el renglón (aunque sea el mismo producto escaneado otra vez).
+  String? _activeProductId;
+  int _addSerial = 0;
+
   List<CartItem> get cart => List.unmodifiable(_cart);
   String? get selectedCustomerId => _selectedCustomerId;
+  String? get activeProductId => _activeProductId;
+  int get addSerial => _addSerial;
   bool get isEmpty => _cart.isEmpty;
   int get itemCount => _cart.fold(0, (sum, item) => sum + item.quantity);
   double get total => _cart.fold(0.0, (sum, item) => sum + item.subtotal);
@@ -19,6 +30,8 @@ class PosProvider extends ChangeNotifier {
   }
 
   void addProduct(Product product) {
+    _activeProductId = product.id;
+    _addSerial++;
     for (final item in _cart) {
       if (item.product.id == product.id) {
         item.quantity++;
@@ -34,6 +47,7 @@ class PosProvider extends ChangeNotifier {
     for (final item in _cart) {
       if (item.product.id == productId) {
         item.quantity++;
+        _activeProductId = productId;
         notifyListeners();
         return;
       }
@@ -45,8 +59,10 @@ class PosProvider extends ChangeNotifier {
       if (item.product.id == productId) {
         if (item.quantity <= 1) {
           _cart.remove(item);
+          if (_activeProductId == productId) _activeProductId = null;
         } else {
           item.quantity--;
+          _activeProductId = productId;
         }
         notifyListeners();
         return;
@@ -56,11 +72,13 @@ class PosProvider extends ChangeNotifier {
 
   void removeItem(String productId) {
     _cart.removeWhere((item) => item.product.id == productId);
+    if (_activeProductId == productId) _activeProductId = null;
     notifyListeners();
   }
 
   void clear() {
     _cart.clear();
+    _activeProductId = null;
     _selectedCustomerId = null;
     notifyListeners();
   }

@@ -18,6 +18,10 @@ class CategoriesTable extends Table {
   /// vive en `category_icon_options.dart`.
   TextColumn get icon => text().nullable()();
 
+  /// Color de la categoría como entero ARGB (ej. 0xFF43A047). Si es nulo, la
+  /// categoría hereda el de su categoría padre.
+  IntColumn get color => integer().nullable()();
+
   /// `.references(CategoriesTable, #id)` — la tabla se referencia A SÍ
   /// MISMA. Es lo mismo que en Laravel harías con
   /// `$table->foreignId('parent_id')->nullable()->constrained('categories')`.

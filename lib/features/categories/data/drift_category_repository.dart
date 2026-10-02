@@ -22,6 +22,7 @@ class DriftCategoryRepository implements CategoryRepository {
     String? description,
     String? parentId,
     String? icon,
+    int? color,
   }) async {
     final row = await _db.into(_db.categoriesTable).insertReturning(
           CategoriesTableCompanion.insert(
@@ -29,6 +30,7 @@ class DriftCategoryRepository implements CategoryRepository {
             description: Value(description),
             parentId: Value(parentId),
             icon: Value(icon),
+            color: Value(color),
           ),
         );
     return _toModel(row);
@@ -44,6 +46,7 @@ class DriftCategoryRepository implements CategoryRepository {
         description: Value(category.description),
         parentId: Value(category.parentId),
         icon: Value(category.icon),
+        color: Value(category.color),
       ),
     );
   }
@@ -75,6 +78,7 @@ class DriftCategoryRepository implements CategoryRepository {
       description: row.description,
       parentId: row.parentId,
       icon: row.icon,
+      color: row.color,
     );
   }
 }

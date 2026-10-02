@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart' hide Category;
 
+import '../core/theme/category_colors.dart';
 import '../features/categories/data/category_repository.dart';
 import '../models/category.dart';
 
@@ -63,6 +64,29 @@ class CategoryProvider extends ChangeNotifier {
     return null;
   }
 
+  /// Color efectivo de una categoría: el propio, o el del ancestro más
+  /// cercano que tenga uno (una subcategoría hereda el de su padre).
+  int colorValueFor(String categoryId) {
+    String? id = categoryId;
+    while (id != null) {
+      final category = byId(id);
+      if (category == null) break;
+      if (category.color != null) return category.color!;
+      id = category.parentId;
+    }
+    return defaultCategoryColor;
+  }
+
+  /// Siguiente color de la paleta que aún no usa ninguna categoría raíz
+  /// (o el primero, si ya se usaron todos) — se sugiere al crear una nueva.
+  int nextSuggestedColor() {
+    final used = _categories.map((c) => c.color).whereType<int>().toSet();
+    for (final candidate in categoryColorPalette) {
+      if (!used.contains(candidate)) return candidate;
+    }
+    return categoryColorPalette[_categories.length % categoryColorPalette.length];
+  }
+
   List<CategoryNode> get tree {
     List<CategoryNode> buildChildren(String? parentId) {
       return _categories
@@ -95,8 +119,15 @@ class CategoryProvider extends ChangeNotifier {
     String? description,
     String? parentId,
     String? icon,
+    int? color,
   }) {
-    return _repository.add(name: name, description: description, parentId: parentId, icon: icon);
+    return _repository.add(
+      name: name,
+      description: description,
+      parentId: parentId,
+      icon: icon,
+      color: color,
+    );
   }
 
   Future<void> updateCategory(Category category) {

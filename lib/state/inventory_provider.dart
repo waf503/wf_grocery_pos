@@ -3,55 +3,73 @@ import 'dart:async';
 import 'package:drift/drift.dart' show Value;
 import 'package:flutter/foundation.dart';
 
+import '../core/barcode/internal_barcode.dart';
 import '../core/database/app_database.dart';
+import '../core/text/product_tags.dart';
 import '../features/products/data/product_repository.dart';
 import '../models/product.dart';
-import '../models/product_family.dart';
 
 /// Estado de la sección de Inventario.
 ///
 /// Delega todo al [ProductRepository] (inyectado por constructor) y
 /// mantiene una copia local sincronizada — actualizada sola cada vez que
-/// la base de datos cambia, gracias a `watchAllVariants()`.
+/// la base de datos cambia, gracias a `watchAll()`.
 class InventoryProvider extends ChangeNotifier {
   InventoryProvider(this._repository) {
-    _variantsSubscription = _repository.watchAllVariants().listen((rows) {
+    _subscription = _repository.watchAll().listen((rows) {
       _products = rows;
-      notifyListeners();
-    });
-    _familiesSubscription = _repository.watchFamilies().listen((rows) {
-      _families = rows;
       notifyListeners();
     });
   }
 
   final ProductRepository _repository;
-  late final StreamSubscription<List<Product>> _variantsSubscription;
-  late final StreamSubscription<List<ProductFamily>> _familiesSubscription;
+  late final StreamSubscription<List<Product>> _subscription;
 
   List<Product> _products = [];
-  List<ProductFamily> _families = [];
 
   List<Product> get products => List.unmodifiable(_products);
-
-  /// Familias existentes, para el `Autocomplete` del formulario de
-  /// Inventario (poder reutilizar "Coca-Cola" al agregar una presentación
-  /// nueva en vez de crear una familia duplicada).
-  List<ProductFamily> get families => List.unmodifiable(_families);
 
   List<Product> get lowStockProducts =>
       _products.where((p) => p.isLowStock).toList();
 
+  /// Búsqueda por nombre, tags o código de barras (sin importar mayúsculas
+  /// ni acentos).
   List<Product> search({String query = '', String? category}) {
-    final normalizedQuery = query.trim().toLowerCase();
+    final normalizedQuery = normalizeText(query.trim());
     return _products.where((p) {
       final matchesCategory =
           category == null || category == 'Todas' || p.category == category;
       final matchesQuery = normalizedQuery.isEmpty ||
-          p.name.toLowerCase().contains(normalizedQuery) ||
-          (p.barcode?.contains(normalizedQuery) ?? false);
+          normalizeText(p.name).contains(normalizedQuery) ||
+          p.tags.contains(normalizedQuery) ||
+          (p.barcode?.contains(query.trim()) ?? false);
       return matchesCategory && matchesQuery;
     }).toList();
+  }
+
+  /// Productos ya ingresados que coinciden con lo que el usuario está
+  /// escribiendo: cada palabra tecleada debe ser el comienzo de algún tag
+  /// ("coca" → "Coca-Cola Lata 355ml"). Como los tags viven en el propio
+  /// producto, al borrar un producto desaparece su sugerencia.
+  List<Product> suggestionsFor(String text, {int limit = 6}) {
+    final typed = tokenize(text);
+    if (typed.isEmpty) return const [];
+    final matches = _products.where((p) {
+      final tags = p.tags.split(' ');
+      return typed.every((word) => tags.any((tag) => tag.startsWith(word)));
+    }).toList()
+      ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+    return matches.take(limit).toList();
+  }
+
+  /// Código EAN-13 interno libre, para productos o packs sin código físico.
+  String generateInternalBarcode() {
+    return buildInternalBarcode(nextInternalSequence(_products.map((p) => p.barcode)));
+  }
+
+  /// `true` si otro producto (distinto de [exceptId]) ya usa ese código.
+  bool isBarcodeTaken(String code, {String? exceptId}) {
+    return _products.any((p) => p.barcode == code && p.id != exceptId);
   }
 
   Product? byId(String id) {
@@ -61,56 +79,66 @@ class InventoryProvider extends ChangeNotifier {
     return null;
   }
 
-  /// Crea una variante nueva, reutilizando la familia si ya existe
-  /// (mismo nombre, sin importar mayúsculas/minúsculas) o creándola si no.
   Future<void> addProduct({
-    required String familyName,
+    required String name,
     required String categoryId,
-    required String presentation,
-    required String unit,
+    required String unitId,
     required double price,
     required double cost,
     required double stock,
     required double minStock,
     String? barcode,
-  }) async {
-    final family = await _repository.findOrCreateFamily(
-      name: familyName,
-      categoryId: categoryId,
-    );
-    await _repository.addVariant(
-      family.id,
-      ProductVariantsTableCompanion.insert(
-        productId: family.id,
-        presentation: presentation,
-        unit: unit,
+    String extraTags = '',
+  }) {
+    return _repository.add(
+      ProductsTableCompanion.insert(
+        name: name.trim(),
+        categoryId: categoryId,
+        unitId: unitId,
         price: price,
         cost: cost,
         stock: Value(stock),
         minStock: Value(minStock),
         barcode: Value(barcode),
+        tags: Value(buildTags(name, extra: extraTags)),
       ),
     );
   }
 
-  Future<void> updateProduct(Product product) {
-    return _repository.updateVariant(
-      ProductVariantsTableCompanion(
-        id: Value(product.id),
-        productId: Value(product.familyId),
-        presentation: Value(product.presentation),
-        unit: Value(product.unit),
-        price: Value(product.price),
-        cost: Value(product.cost),
-        stock: Value(product.stock),
-        minStock: Value(product.minStock),
-        barcode: Value(product.barcode),
+  Future<void> updateProduct({
+    required String id,
+    required String name,
+    required String categoryId,
+    required String unitId,
+    required double price,
+    required double cost,
+    required double stock,
+    required double minStock,
+    String? barcode,
+    String extraTags = '',
+  }) {
+    return _repository.update(
+      ProductsTableCompanion(
+        id: Value(id),
+        name: Value(name.trim()),
+        categoryId: Value(categoryId),
+        unitId: Value(unitId),
+        price: Value(price),
+        cost: Value(cost),
+        stock: Value(stock),
+        minStock: Value(minStock),
+        barcode: Value(barcode),
+        tags: Value(buildTags(name, extra: extraTags)),
       ),
     );
   }
 
-  Future<void> deleteProduct(String id) {
-    return _repository.deleteVariant(id);
+  Future<void> deleteProduct(String id) => _repository.delete(id);
+
+  Future<void> deleteProducts(Iterable<String> ids) async {
+    for (final id in ids) {
+      await _repository.delete(id);
+    }
   }
 
   Future<void> decreaseStock(String productId, double quantity) {
@@ -119,8 +147,7 @@ class InventoryProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _variantsSubscription.cancel();
-    _familiesSubscription.cancel();
+    _subscription.cancel();
     super.dispose();
   }
 }

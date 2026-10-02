@@ -6,12 +6,14 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/categories/data/drift_category_repository.dart';
 import 'features/products/data/drift_product_repository.dart';
+import 'features/units/data/drift_unit_repository.dart';
 import 'state/cash_provider.dart';
 import 'state/category_provider.dart';
 import 'state/customer_provider.dart';
 import 'state/inventory_provider.dart';
 import 'state/pos_provider.dart';
 import 'state/sales_provider.dart';
+import 'state/unit_provider.dart';
 
 class GroceryPosApp extends StatelessWidget {
   const GroceryPosApp({super.key, required this.database});
@@ -24,6 +26,9 @@ class GroceryPosApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(
           create: (_) => CategoryProvider(DriftCategoryRepository(database)),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => UnitProvider(DriftUnitRepository(database)),
         ),
         ChangeNotifierProvider(
           create: (_) =>

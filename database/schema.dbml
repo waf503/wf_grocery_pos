@@ -182,6 +182,8 @@ Table categories {
   name varchar
   description varchar [null]
   parent_id uuid [ref: > categories.id, null, note: 'autoreferencia: permite anidar categorias (ej. Gaseosas dentro de Bebidas)']
+  icon varchar [null, note: 'id del icono elegido (se mapea a un IconData en la app)']
+  color integer [null, note: 'color ARGB para identificar la categoria en el POS; null = hereda el del padre']
   active boolean [default: true]
   created_at timestamp [default: `now()`]
 }
@@ -195,39 +197,39 @@ Table suppliers {
   created_at timestamp [default: `now()`]
 }
 
+Table units {
+  id uuid [pk]
+  tenant_id uuid [ref: > tenants.id]
+  name varchar [note: 'ej. Kilogramo']
+  abbreviation varchar [null, note: 'ej. kg; se muestra junto a las cantidades']
+  allows_decimals boolean [default: false, note: 'true para unidades que se pesan o miden (kg, lb, litro); false para pieza/paquete']
+  active boolean [default: true]
+  created_at timestamp [default: `now()`]
+
+  Note: 'Cada tienda administra sus propias unidades.'
+}
+
 Table products {
   id uuid [pk]
   tenant_id uuid [ref: > tenants.id]
   store_id uuid [ref: > stores.id]
   category_id uuid [ref: > categories.id]
-  name varchar [note: 'el concepto general, ej. "Coca-Cola" — sin presentacion']
-  brand varchar [null]
-  active boolean [default: true]
-  created_at timestamp [default: `now()`]
-  updated_at timestamp [null]
-  deleted_at timestamp [null]
-
-  Note: 'Producto = la idea general. Cada presentacion vendible vive en product_variants.'
-}
-
-Table product_variants {
-  id uuid [pk]
-  product_id uuid [ref: > products.id]
   location_id uuid [ref: > locations.id, null]
-  presentation varchar [note: 'ej. Lata 355ml, Botella 600ml, 2L, Fardo 24pz']
+  name varchar [note: 'nombre completo vendible, ya con presentacion, ej. "Coca-Cola Lata 355ml"']
   barcode varchar [null]
-  unit varchar [note: 'pieza | kg | paquete | litro']
+  unit_id uuid [ref: > units.id, note: 'unidad de medida: pieza, kg, libra, litro, paquete...']
   price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado)']
   cost decimal(10,2) [note: 'costo promedio ponderado VIGENTE (denormalizado)']
   target_margin_pct decimal(5,2) [null, note: 'margen objetivo: sugiere precio nuevo cuando cambia el costo']
   stock decimal(10,3) [default: 0, note: 'decimal para permitir productos vendidos por kg']
   min_stock decimal(10,3) [default: 5]
+  tags varchar [default: '', note: 'palabras del nombre + etiquetas extra, minusculas y sin acentos, separadas por espacio; sirven para sugerir nombres al escribir (ej. "coca" -> "Coca-Cola Lata 355ml")']
   active boolean [default: true]
   created_at timestamp [default: `now()`]
   updated_at timestamp [null]
   deleted_at timestamp [null]
 
-  Note: 'Esta es la unidad REAL que se vende y se cuenta en inventario (el SKU).'
+  Note: 'Tabla plana y desnormalizada: cada fila es la unidad REAL que se vende y se cuenta en inventario (el SKU). No hay familias ni variantes.'
 }
 
 Table combos {
@@ -235,19 +237,19 @@ Table combos {
   tenant_id uuid [ref: > tenants.id]
   store_id uuid [ref: > stores.id]
   name varchar [note: 'ej. "Pack Coca-Cola 6 latas" — buscable/escaneable como si fuera un producto']
-  variant_id uuid [ref: > product_variants.id, note: 'que variante representa realmente']
-  quantity_multiplier decimal(10,3) [note: 'cuantas unidades de esa variante equivale, ej. 6']
+  product_id uuid [ref: > products.id, note: 'que producto representa realmente']
+  quantity_multiplier decimal(10,3) [note: 'cuantas unidades de ese producto equivale, ej. 6']
   combo_price decimal(10,2) [note: 'precio de venta del combo completo (normalmente con descuento vs comprar suelto)']
   barcode varchar [null, note: 'si el pack sellado trae su propio codigo de barras fisico']
   active boolean [default: true]
   created_at timestamp [default: `now()`]
 
-  Note: 'El combo NO tiene stock propio: vender 1 combo descuenta quantity_multiplier unidades del stock de variant_id.'
+  Note: 'El combo NO tiene stock propio: vender 1 combo descuenta quantity_multiplier unidades del stock de product_id.'
 }
 
 Table product_price_history {
   id uuid [pk]
-  variant_id uuid [ref: > product_variants.id]
+  product_id uuid [ref: > products.id]
   price decimal(10,2)
   cost decimal(10,2)
   source price_history_source
@@ -278,7 +280,7 @@ Table purchases {
 Table purchase_items {
   id uuid [pk]
   purchase_id uuid [ref: > purchases.id]
-  variant_id uuid [ref: > product_variants.id]
+  product_id uuid [ref: > products.id]
   quantity decimal(10,3)
   unit_cost decimal(10,2) [note: 'costo de ESTA compra especifica; puede variar de la anterior']
   subtotal decimal(10,2)
@@ -292,7 +294,7 @@ Table inventory_movements {
   id uuid [pk]
   tenant_id uuid [ref: > tenants.id]
   store_id uuid [ref: > stores.id]
-  variant_id uuid [ref: > product_variants.id]
+  product_id uuid [ref: > products.id]
   type inventory_movement_type
   quantity decimal(10,3)
   unit_cost decimal(10,2) [note: 'costo promedio ponderado al momento del movimiento']
@@ -325,10 +327,10 @@ Table promotions {
 
 Table promotion_products {
   promotion_id uuid [ref: > promotions.id]
-  variant_id uuid [ref: > product_variants.id]
+  product_id uuid [ref: > products.id]
 
   indexes {
-    (promotion_id, variant_id) [pk]
+    (promotion_id, product_id) [pk]
   }
 }
 
@@ -414,11 +416,11 @@ Table sales {
 Table sale_items {
   id uuid [pk]
   sale_id uuid [ref: > sales.id]
-  variant_id uuid [ref: > product_variants.id]
+  product_id uuid [ref: > products.id]
   promotion_id uuid [ref: > promotions.id, null]
-  combo_id uuid [ref: > combos.id, null, note: 'si se vendio como combo/pack; el stock siempre se descuenta de variant_id']
-  product_name varchar [note: 'snapshot historico del nombre (incluye presentacion o nombre del combo)']
-  quantity decimal(10,3) [note: 'unidades REALES de la variante, ya multiplicadas si vino de un combo']
+  combo_id uuid [ref: > combos.id, null, note: 'si se vendio como combo/pack; el stock siempre se descuenta de product_id']
+  product_name varchar [note: 'snapshot historico del nombre (o nombre del combo)']
+  quantity decimal(10,3) [note: 'unidades REALES del producto, ya multiplicadas si vino de un combo']
   unit_price decimal(10,2) [note: 'precio unitario ANTES de descuento, snapshot historico']
   discount_amount decimal(10,2) [default: 0]
   subtotal decimal(10,2) [note: 'quantity * unit_price - discount_amount']

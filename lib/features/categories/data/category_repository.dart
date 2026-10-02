@@ -21,6 +21,7 @@ abstract class CategoryRepository {
     String? description,
     String? parentId,
     String? icon,
+    int? color,
   });
 
   Future<void> update(Category category);

@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
+import '../../../core/money.dart';
 import '../../../core/text/product_tags.dart';
 
 /// Si la tabla `products` está vacía (primer arranque de la app en este
@@ -31,8 +32,8 @@ Future<void> seedProductsIfEmpty(
       name: name,
       categoryId: categoryIds[categoryName]!,
       unitId: unitIds[unit]!,
-      price: price,
-      cost: cost,
+      priceCents: toCents(price),
+      costCents: toCents(cost),
       stock: Value(stock),
       minStock: Value(minStock),
       tags: Value(buildTags(name)),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/money.dart';
 import '../../../core/text/product_tags.dart';
 import '../../../models/category.dart';
 import '../../../models/product.dart';
@@ -10,8 +11,8 @@ class ProductFormResult {
     required this.name,
     required this.categoryId,
     required this.unitId,
-    required this.price,
-    required this.cost,
+    required this.priceCents,
+    required this.costCents,
     required this.stock,
     required this.minStock,
     this.barcode,
@@ -21,8 +22,8 @@ class ProductFormResult {
   final String name;
   final String categoryId;
   final String unitId;
-  final double price;
-  final double cost;
+  final int priceCents;
+  final int costCents;
   final double stock;
   final double minStock;
   final String? barcode;
@@ -150,8 +151,8 @@ class _ProductFormDialogState extends State<_ProductFormDialog> {
         name: _name.text.trim(),
         categoryId: _categoryId,
         unitId: _unitId,
-        price: double.parse(_price.text),
-        cost: double.parse(_cost.text),
+        priceCents: toCents(double.parse(_price.text)),
+        costCents: toCents(double.parse(_cost.text)),
         stock: double.parse(_stock.text),
         minStock: double.parse(_minStock.text),
         barcode: _barcode.text.trim().isEmpty ? null : _barcode.text.trim(),

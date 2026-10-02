@@ -19,8 +19,11 @@ class ProductsTable extends Table {
   TextColumn get name => text()();
   TextColumn get categoryId => text().references(CategoriesTable, #id)();
   TextColumn get unitId => text().references(UnitsTable, #id)();
-  RealColumn get price => real()();
-  RealColumn get cost => real()();
+  // Precio de venta y costo en centavos enteros (ver `core/money.dart`).
+  // ignore: recursive_getters
+  IntColumn get priceCents => integer().check(priceCents.isBiggerOrEqualValue(0))();
+  // ignore: recursive_getters
+  IntColumn get costCents => integer().check(costCents.isBiggerOrEqualValue(0))();
   RealColumn get stock => real().withDefault(const Constant(0))();
   RealColumn get minStock => real().withDefault(const Constant(5))();
   TextColumn get barcode => text().nullable()();

@@ -218,8 +218,8 @@ Table products {
   name varchar [note: 'nombre completo vendible, ya con presentacion, ej. "Coca-Cola Lata 355ml"']
   barcode varchar [null]
   unit_id uuid [ref: > units.id, note: 'unidad de medida: pieza, kg, libra, litro, paquete...']
-  price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado)']
-  cost decimal(10,2) [note: 'costo promedio ponderado VIGENTE (denormalizado)']
+  price decimal(10,2) [note: 'precio de venta VIGENTE (denormalizado). La app local lo guarda en centavos enteros (price_cents)']
+  cost decimal(10,2) [note: 'costo promedio ponderado VIGENTE (denormalizado). La app local lo guarda en centavos enteros (cost_cents)']
   target_margin_pct decimal(5,2) [null, note: 'margen objetivo: sugiere precio nuevo cuando cambia el costo']
   stock decimal(10,3) [default: 0, note: 'decimal para permitir productos vendidos por kg']
   min_stock decimal(10,3) [default: 5]
@@ -401,6 +401,7 @@ Table cash_movements {
 
 Table sales {
   id uuid [pk]
+  number integer [unique, note: 'folio consecutivo que se imprime en el recibo (V-000123)']
   tenant_id uuid [ref: > tenants.id]
   store_id uuid [ref: > stores.id]
   cash_session_id uuid [ref: > cash_sessions.id]
@@ -411,17 +412,20 @@ Table sales {
   discount_total decimal(10,2) [default: 0]
   total decimal(10,2)
   created_at timestamp [default: `now()`]
+
+  Note: 'Una venta se registra en UNA transaccion: encabezado + renglones + descuento de stock + movimiento de caja (solo si es efectivo). La app local guarda los montos en centavos enteros (columnas *_cents).'
 }
 
 Table sale_items {
   id uuid [pk]
   sale_id uuid [ref: > sales.id]
-  product_id uuid [ref: > products.id]
+  product_id uuid [null, note: 'sin FK a proposito: si el producto se borra, la venta historica queda intacta (por eso existen los snapshots)']
   promotion_id uuid [ref: > promotions.id, null]
   combo_id uuid [ref: > combos.id, null, note: 'si se vendio como combo/pack; el stock siempre se descuenta de product_id']
   product_name varchar [note: 'snapshot historico del nombre (o nombre del combo)']
   quantity decimal(10,3) [note: 'unidades REALES del producto, ya multiplicadas si vino de un combo']
   unit_price decimal(10,2) [note: 'precio unitario ANTES de descuento, snapshot historico']
+  unit_cost decimal(10,2) [note: 'costo unitario al momento de la venta, snapshot historico (permite calcular utilidad)']
   discount_amount decimal(10,2) [default: 0]
   subtotal decimal(10,2) [note: 'quantity * unit_price - discount_amount']
 }

@@ -86,7 +86,13 @@ Future<void> showReceiptDialog(BuildContext context, Sale sale) {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 const Icon(Icons.check_circle, color: Colors.green, size: 32),
-                Text(dateTimeFormat.format(sale.date)),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(sale.receiptNumber, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    Text(dateTimeFormat.format(sale.date)),
+                  ],
+                ),
               ],
             ),
             const SizedBox(height: 12),
@@ -95,7 +101,7 @@ Future<void> showReceiptDialog(BuildContext context, Sale sale) {
                 padding: const EdgeInsets.symmetric(vertical: 2),
                 child: Row(
                   children: [
-                    Expanded(child: Text('${item.quantity}x ${item.productName}')),
+                    Expanded(child: Text('${formatQuantity(item.quantity)}x ${item.productName}')),
                     Text(formatCurrency(item.subtotal)),
                   ],
                 ),

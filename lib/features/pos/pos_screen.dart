@@ -11,6 +11,7 @@ import '../../state/customer_provider.dart';
 import '../../state/inventory_provider.dart';
 import '../../state/pos_provider.dart';
 import '../../state/sales_provider.dart';
+import '../sales/data/sale_repository.dart';
 import 'widgets/cart_panel.dart';
 import 'widgets/checkout_dialog.dart';
 import 'widgets/product_grid.dart';
@@ -116,7 +117,8 @@ class _PosScreenState extends State<PosScreen> {
 
   Future<void> _checkout() async {
     final cash = context.read<CashProvider>();
-    if (!cash.isOpen) {
+    final session = cash.current;
+    if (session == null) {
       await showDialog(
         context: context,
         builder: (context) => AlertDialog(
@@ -134,8 +136,7 @@ class _PosScreenState extends State<PosScreen> {
     }
 
     final pos = context.read<PosProvider>();
-    final total = pos.total;
-    final method = await showPaymentMethodDialog(context, total: total);
+    final method = await showPaymentMethodDialog(context, total: pos.total);
     if (method == null || !mounted) return;
 
     final customers = context.read<CustomerProvider>();
@@ -147,30 +148,54 @@ class _PosScreenState extends State<PosScreen> {
       }
     }
 
-    final sale = Sale(
-      id: context.read<SalesProvider>().nextId(),
-      date: DateTime.now(),
-      items: [
-        for (final item in pos.cart)
-          SaleItem(
-            productName: item.product.name,
-            quantity: item.quantity,
-            unitPrice: item.product.price,
-          ),
-      ],
-      total: total,
-      paymentMethod: method,
-      customerName: customerName,
-    );
+    final lines = [
+      for (final item in pos.cart)
+        SaleLine(
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.quantity.toDouble(),
+          unitPriceCents: item.product.priceCents,
+          unitCostCents: item.product.costCents,
+        ),
+    ];
 
-    context.read<SalesProvider>().addSale(sale);
-    final inventory = context.read<InventoryProvider>();
-    for (final item in pos.cart) {
-      inventory.decreaseStock(item.product.id, item.quantity.toDouble());
+    // La venta, el descuento de existencias y el movimiento de caja se
+    // guardan juntos en una transacción: o pasa todo o no pasa nada.
+    final Sale sale;
+    try {
+      sale = await context.read<SalesProvider>().registerSale(
+            sessionId: session.id,
+            lines: lines,
+            paymentMethod: method,
+            customerId: pos.selectedCustomerId,
+            customerName: customerName,
+          );
+    } on InsufficientStockException catch (e) {
+      if (!mounted) return;
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.error,
+        title: 'Existencias insuficientes',
+        message: 'Solo hay ${formatQuantity(e.available)} de ${e.productName}',
+      );
+      return;
+    } on ProductNotFoundException catch (e) {
+      if (!mounted) return;
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.error,
+        title: 'Producto no disponible',
+        message: e.productName,
+      );
+      return;
+    } on CashSessionClosedException {
+      if (!mounted) return;
+      FeedbackAlert.show(context, type: FeedbackType.error, title: 'La caja está cerrada');
+      return;
     }
-    cash.registerSale(total, note: 'Venta ${sale.id}');
+
     if (method == PaymentMethod.credit && pos.selectedCustomerId != null) {
-      customers.addToBalance(pos.selectedCustomerId!, total);
+      customers.addToBalance(pos.selectedCustomerId!, sale.total);
     }
 
     pos.clear();

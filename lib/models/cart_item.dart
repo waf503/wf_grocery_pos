@@ -1,3 +1,4 @@
+import '../core/money.dart';
 import 'product.dart';
 
 class CartItem {
@@ -6,5 +7,9 @@ class CartItem {
   final Product product;
   int quantity;
 
-  double get subtotal => product.price * quantity;
+  /// El subtotal se calcula en centavos enteros para que el total del
+  /// carrito coincida exactamente con el de la venta que se registra.
+  int get subtotalCents => product.priceCents * quantity;
+
+  double get subtotal => fromCents(subtotalCents);
 }

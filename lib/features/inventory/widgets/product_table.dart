@@ -250,18 +250,11 @@ class _StockPill extends StatelessWidget {
             const SizedBox(width: 4),
           ],
           Text(
-            '${_formatQty(product.stock)} ${product.unit}',
+            '${formatQuantity(product.stock)} ${product.unit}',
             style: TextStyle(color: foreground, fontWeight: FontWeight.w600, fontSize: 13),
           ),
         ],
       ),
     );
   }
-}
-
-/// El stock es `double` (para permitir kg fraccionarios), pero se ve feo
-/// mostrar "40.0 pieza" cuando es un número entero — esto recorta el ".0"
-/// solo cuando no hay parte decimal real.
-String _formatQty(double value) {
-  return value == value.roundToDouble() ? value.toStringAsFixed(0) : value.toStringAsFixed(2);
 }

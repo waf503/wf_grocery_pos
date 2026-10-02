@@ -56,18 +56,6 @@ class DriftProductRepository implements ProductRepository {
     return (_db.delete(_db.productsTable)..where((row) => row.id.equals(id))).go();
   }
 
-  @override
-  Future<void> decreaseStock(String id, double quantity) async {
-    final product = await getById(id);
-    if (product == null) return;
-    await update(
-      ProductsTableCompanion(
-        id: Value(id),
-        stock: Value(product.stock - quantity),
-      ),
-    );
-  }
-
   Product _rowToModel(TypedResult row) {
     final product = row.readTable(_db.productsTable);
     final category = row.readTable(_db.categoriesTable);
@@ -85,8 +73,8 @@ class DriftProductRepository implements ProductRepository {
       unitId: unit.id,
       unit: (abbreviation != null && abbreviation.isNotEmpty) ? abbreviation : unit.name,
       allowsDecimals: unit.allowsDecimals,
-      price: row.price,
-      cost: row.cost,
+      priceCents: row.priceCents,
+      costCents: row.costCents,
       stock: row.stock,
       minStock: row.minStock,
       barcode: row.barcode,

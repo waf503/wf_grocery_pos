@@ -18,6 +18,4 @@ abstract class ProductRepository {
   Future<void> update(ProductsTableCompanion product);
 
   Future<void> delete(String id);
-
-  Future<void> decreaseStock(String id, double quantity);
 }

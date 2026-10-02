@@ -1,46 +1,54 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import '../core/money.dart';
+import '../features/cash/data/cash_repository.dart';
 import '../models/cash_session.dart';
 
+/// Estado de la caja. La sesión abierta vive en la base de datos, así que
+/// sobrevive a cerrar la app; este provider solo refleja lo que el
+/// repositorio emite.
 class CashProvider extends ChangeNotifier {
+  CashProvider(this._repository) {
+    _subscription = _repository.watchCurrent().listen((session) {
+      _current = session;
+      notifyListeners();
+    });
+  }
+
+  final CashRepository _repository;
+  late final StreamSubscription<CashSession?> _subscription;
+
   CashSession? _current;
-  final List<CashSession> _history = [];
 
   CashSession? get current => _current;
   bool get isOpen => _current?.isOpen ?? false;
-  List<CashSession> get history => List.unmodifiable(_history.reversed);
 
-  void openSession(double openingAmount) {
-    _current = CashSession(openingAmount: openingAmount, openedAt: DateTime.now());
-    notifyListeners();
+  Future<void> openSession(double openingAmount) async {
+    await _repository.open(openingCents: toCents(openingAmount));
   }
 
-  void registerSale(double amount, {required String note}) {
-    _current?.movements.add(
-      CashMovement(
-        type: CashMovementType.sale,
-        amount: amount,
-        note: note,
-        time: DateTime.now(),
-      ),
-    );
-    notifyListeners();
-  }
-
-  void registerMovement(CashMovementType type, double amount, String note) {
-    _current?.movements.add(
-      CashMovement(type: type, amount: amount, note: note, time: DateTime.now()),
-    );
-    notifyListeners();
-  }
-
-  void closeSession(double countedAmount) {
+  Future<void> registerMovement(CashMovementType type, double amount, String note) async {
     final session = _current;
     if (session == null) return;
-    session.closedAt = DateTime.now();
-    session.closingCountedAmount = countedAmount;
-    _history.add(session);
-    _current = null;
-    notifyListeners();
+    await _repository.addMovement(
+      sessionId: session.id,
+      type: type,
+      amountCents: toCents(amount),
+      note: note,
+    );
+  }
+
+  Future<void> closeSession(double countedAmount) async {
+    final session = _current;
+    if (session == null) return;
+    await _repository.close(sessionId: session.id, countedCents: toCents(countedAmount));
+  }
+
+  @override
+  void dispose() {
+    _subscription.cancel();
+    super.dispose();
   }
 }

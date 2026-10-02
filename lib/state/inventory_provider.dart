@@ -83,8 +83,8 @@ class InventoryProvider extends ChangeNotifier {
     required String name,
     required String categoryId,
     required String unitId,
-    required double price,
-    required double cost,
+    required int priceCents,
+    required int costCents,
     required double stock,
     required double minStock,
     String? barcode,
@@ -95,8 +95,8 @@ class InventoryProvider extends ChangeNotifier {
         name: name.trim(),
         categoryId: categoryId,
         unitId: unitId,
-        price: price,
-        cost: cost,
+        priceCents: priceCents,
+        costCents: costCents,
         stock: Value(stock),
         minStock: Value(minStock),
         barcode: Value(barcode),
@@ -110,8 +110,8 @@ class InventoryProvider extends ChangeNotifier {
     required String name,
     required String categoryId,
     required String unitId,
-    required double price,
-    required double cost,
+    required int priceCents,
+    required int costCents,
     required double stock,
     required double minStock,
     String? barcode,
@@ -123,8 +123,8 @@ class InventoryProvider extends ChangeNotifier {
         name: Value(name.trim()),
         categoryId: Value(categoryId),
         unitId: Value(unitId),
-        price: Value(price),
-        cost: Value(cost),
+        priceCents: Value(priceCents),
+        costCents: Value(costCents),
         stock: Value(stock),
         minStock: Value(minStock),
         barcode: Value(barcode),
@@ -139,10 +139,6 @@ class InventoryProvider extends ChangeNotifier {
     for (final id in ids) {
       await _repository.delete(id);
     }
-  }
-
-  Future<void> decreaseStock(String productId, double quantity) {
-    return _repository.decreaseStock(productId, quantity);
   }
 
   @override

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/money.dart';
 import '../models/cart_item.dart';
 import '../models/product.dart';
 
@@ -22,7 +23,8 @@ class PosProvider extends ChangeNotifier {
   int get addSerial => _addSerial;
   bool get isEmpty => _cart.isEmpty;
   int get itemCount => _cart.fold(0, (sum, item) => sum + item.quantity);
-  double get total => _cart.fold(0.0, (sum, item) => sum + item.subtotal);
+  int get totalCents => _cart.fold(0, (sum, item) => sum + item.subtotalCents);
+  double get total => fromCents(totalCents);
 
   void setCustomer(String? customerId) {
     _selectedCustomerId = customerId;

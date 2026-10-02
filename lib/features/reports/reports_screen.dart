@@ -57,7 +57,7 @@ class ReportsScreen extends StatelessWidget {
                         child: Row(
                           children: [
                             Expanded(child: Text(entry.key)),
-                            Text('${entry.value} unidades', style: Theme.of(context).textTheme.bodyMedium),
+                            Text('${formatQuantity(entry.value)} unidades', style: Theme.of(context).textTheme.bodyMedium),
                           ],
                         ),
                       ),
@@ -84,7 +84,7 @@ class ReportsScreen extends StatelessWidget {
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.receipt_long_outlined),
-                        title: Text('${sale.itemCount} artículos · ${sale.paymentMethod.label}'),
+                        title: Text('${sale.receiptNumber} · ${formatQuantity(sale.itemCount)} artículos · ${sale.paymentMethod.label}'),
                         subtitle: Text(dateTimeFormat.format(sale.date)),
                         trailing: Text(
                           formatCurrency(sale.total),

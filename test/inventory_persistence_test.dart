@@ -35,8 +35,8 @@ void main() {
         name: 'Chocolate Abuelita Tableta 90g',
         categoryId: categoryIds['Abarrotes']!,
         unitId: unitIds['Pieza']!,
-        price: 35.0,
-        cost: 27.0,
+        priceCents: 3500,
+        costCents: 2700,
         tags: Value(buildTags('Chocolate Abuelita Tableta 90g')),
       ),
     );
@@ -67,8 +67,8 @@ void main() {
         name: 'Coca-Cola Lata 355ml',
         categoryId: categoryIds['Gaseosas']!,
         unitId: unitIds['Pieza']!,
-        price: 12,
-        cost: 8,
+        priceCents: 1200,
+        costCents: 800,
         tags: Value(buildTags('Coca-Cola Lata 355ml', extra: 'refresco')),
       ),
     );

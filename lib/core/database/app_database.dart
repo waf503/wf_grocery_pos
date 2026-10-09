@@ -6,11 +6,14 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 import '../../models/cash_session.dart';
+import '../../models/customer.dart';
 import '../../models/sale.dart';
 import 'id_generator.dart';
 import 'tables/cash_movements_table.dart';
 import 'tables/cash_sessions_table.dart';
 import 'tables/categories_table.dart';
+import 'tables/customer_movements_table.dart';
+import 'tables/customers_table.dart';
 import 'tables/products_table.dart';
 import 'tables/sale_items_table.dart';
 import 'tables/sales_table.dart';
@@ -36,6 +39,8 @@ part 'app_database.g.dart';
     SalesTable,
     SaleItemsTable,
     CashMovementsTable,
+    CustomersTable,
+    CustomerMovementsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -51,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 11;
 
   /// Migraciones. REGLA: desde la versión 8 hay datos reales de negocio
   /// (ventas y caja), así que cada cambio de esquema debe escribirse como un
@@ -89,7 +94,7 @@ class AppDatabase extends _$AppDatabase {
             await m.alterTable(
               TableMigration(
                 productsTable,
-                newColumns: [productsTable.priceCents, productsTable.costCents],
+                newColumns: [productsTable.priceCents, productsTable.costCents, productsTable.updatedAt],
                 columnTransformer: {
                   productsTable.priceCents:
                       const CustomExpression<int>('CAST(ROUND(price * 100) AS INTEGER)'),
@@ -98,6 +103,25 @@ class AppDatabase extends _$AppDatabase {
                 },
               ),
             );
+          }
+          if (from < 10) {
+            // Clientes con estado de cuenta persistente y anulación de ventas.
+            await m.createTable(customersTable);
+            await m.createTable(customerMovementsTable);
+            await m.create(idxCustomerMovementsCustomerId);
+            if (from >= 8) {
+              // (Desde la v7 la tabla `sales` se acaba de crear arriba con
+              // estas columnas ya incluidas.)
+              await m.addColumn(salesTable, salesTable.status);
+              await m.addColumn(salesTable, salesTable.voidedAt);
+              await m.addColumn(salesTable, salesTable.voidReason);
+            }
+          }
+          if (from < 11) {
+            // Fecha de última actualización de cada producto (nula hasta la
+            // primera edición).
+            // (Antes de la v9 la tabla se reconstruye arriba ya con la columna.)
+            if (from >= 9) await m.addColumn(productsTable, productsTable.updatedAt);
           }
         },
         beforeOpen: (details) async {

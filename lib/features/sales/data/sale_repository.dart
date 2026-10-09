@@ -47,20 +47,52 @@ class CashSessionClosedException implements Exception {
   String toString() => 'La caja está cerrada: ábrela antes de registrar una venta.';
 }
 
+/// Una venta a crédito (fiado) necesita un cliente registrado.
+class CreditRequiresCustomerException implements Exception {
+  @override
+  String toString() => 'Para vender a crédito selecciona un cliente.';
+}
+
+/// La venta que se quiere anular no existe.
+class SaleNotFoundException implements Exception {
+  @override
+  String toString() => 'La venta no existe.';
+}
+
+/// La venta ya estaba anulada.
+class SaleAlreadyVoidedException implements Exception {
+  @override
+  String toString() => 'La venta ya fue anulada.';
+}
+
 abstract class SaleRepository {
-  /// Ventas desde [from] en adelante, de la más reciente a la más antigua.
-  Stream<List<Sale>> watchSince(DateTime from);
+  /// Ventas desde [from] (incluida) hasta [to] (excluida; sin límite si es
+  /// nulo), de la más reciente a la más antigua.
+  Stream<List<Sale>> watchBetween(DateTime from, {DateTime? to});
 
   /// Registra una venta COMPLETA en una sola transacción: encabezado,
   /// renglones, descuento de existencias y (si es en efectivo) el movimiento
   /// de caja. Si algo falla —por ejemplo no hay existencias— no se guarda
-  /// nada. Lanza [InsufficientStockException], [ProductNotFoundException] o
-  /// [CashSessionClosedException].
+  /// nada. Las ventas a crédito también cargan el saldo del cliente. Lanza
+  /// [InsufficientStockException], [ProductNotFoundException],
+  /// [CashSessionClosedException] o [CreditRequiresCustomerException].
   Future<Sale> registerSale({
     required String sessionId,
     required List<SaleLine> lines,
     required PaymentMethod paymentMethod,
     String? customerId,
     String? customerName,
+  });
+
+  /// Anula una venta en una sola transacción: la marca como anulada con su
+  /// [reason], devuelve las existencias, revierte el efectivo (un retiro en
+  /// la caja abierta [cashSessionId]; obligatorio si la venta fue en
+  /// efectivo) y, si fue fiado, revierte el cargo al cliente. Lanza
+  /// [SaleNotFoundException], [SaleAlreadyVoidedException] o
+  /// [CashSessionClosedException].
+  Future<void> voidSale({
+    required String saleId,
+    required String reason,
+    String? cashSessionId,
   });
 }

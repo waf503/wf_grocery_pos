@@ -12,6 +12,7 @@ class _NavDestination {
 const List<_NavDestination> _destinations = [
   _NavDestination('Inicio', Icons.dashboard_outlined, Icons.dashboard),
   _NavDestination('Punto de Venta', Icons.point_of_sale_outlined, Icons.point_of_sale),
+  _NavDestination('Ventas', Icons.receipt_long_outlined, Icons.receipt_long),
   _NavDestination('Inventario', Icons.inventory_2_outlined, Icons.inventory_2),
   _NavDestination('Categorías', Icons.category_outlined, Icons.category),
   _NavDestination('Unidades', Icons.straighten_outlined, Icons.straighten),

@@ -2,6 +2,10 @@ import '../core/money.dart';
 
 enum PaymentMethod { cash, card, credit }
 
+/// Una venta anulada se conserva en el historial (con su motivo), pero ya
+/// no cuenta en totales ni reportes.
+enum SaleStatus { completed, voided }
+
 extension PaymentMethodLabel on PaymentMethod {
   String get label {
     switch (this) {
@@ -49,6 +53,9 @@ class Sale {
     required this.paymentMethod,
     this.customerId,
     this.customerName,
+    this.status = SaleStatus.completed,
+    this.voidedAt,
+    this.voidReason,
   });
 
   final String id;
@@ -61,6 +68,11 @@ class Sale {
   final PaymentMethod paymentMethod;
   final String? customerId;
   final String? customerName;
+  final SaleStatus status;
+  final DateTime? voidedAt;
+  final String? voidReason;
+
+  bool get isVoided => status == SaleStatus.voided;
 
   double get total => fromCents(totalCents);
 

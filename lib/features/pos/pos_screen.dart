@@ -136,16 +136,20 @@ class _PosScreenState extends State<PosScreen> {
     }
 
     final pos = context.read<PosProvider>();
-    final method = await showPaymentMethodDialog(context, total: pos.total);
+    final customers = context.read<CustomerProvider>();
+    final customer = customers.byId(pos.selectedCustomerId);
+    final method = await showPaymentMethodDialog(context, total: pos.total, customerName: customer?.name);
     if (method == null || !mounted) return;
 
-    final customers = context.read<CustomerProvider>();
-    String? customerName;
-    for (final c in customers.customers) {
-      if (c.id == pos.selectedCustomerId) {
-        customerName = c.name;
-        break;
-      }
+    // El fiado exige un cliente registrado (no "Público general").
+    if (method == PaymentMethod.credit && customer == null) {
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.warning,
+        title: 'Selecciona un cliente',
+        message: 'Para vender a crédito elige un cliente en la venta',
+      );
+      return;
     }
 
     final lines = [
@@ -167,8 +171,8 @@ class _PosScreenState extends State<PosScreen> {
             sessionId: session.id,
             lines: lines,
             paymentMethod: method,
-            customerId: pos.selectedCustomerId,
-            customerName: customerName,
+            customerId: customer?.id,
+            customerName: customer?.name,
           );
     } on InsufficientStockException catch (e) {
       if (!mounted) return;
@@ -188,14 +192,14 @@ class _PosScreenState extends State<PosScreen> {
         message: e.productName,
       );
       return;
+    } on CreditRequiresCustomerException catch (e) {
+      if (!mounted) return;
+      FeedbackAlert.show(context, type: FeedbackType.warning, title: e.toString());
+      return;
     } on CashSessionClosedException {
       if (!mounted) return;
       FeedbackAlert.show(context, type: FeedbackType.error, title: 'La caja está cerrada');
       return;
-    }
-
-    if (method == PaymentMethod.credit && pos.selectedCustomerId != null) {
-      customers.addToBalance(pos.selectedCustomerId!, sale.total);
     }
 
     pos.clear();

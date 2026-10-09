@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as p;
@@ -50,6 +51,16 @@ Future<void> _revertProductsToDecimalPrices(AppDatabase db) async {
   ''');
   await db.customStatement('DROP TABLE products');
   await db.customStatement('ALTER TABLE products_old RENAME TO products');
+}
+
+/// Quita lo que agregó la v10 (clientes y columnas de anulación en `sales`)
+/// para simular una base v8/v9 real.
+Future<void> _revertToV9Sales(AppDatabase db) async {
+  await db.customStatement('DROP TABLE customer_account_movements');
+  await db.customStatement('DROP TABLE customers');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN status');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN voided_at');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN void_reason');
 }
 
 void main() {
@@ -119,12 +130,14 @@ void main() {
         lines: [_line(cola, 1)],
         paymentMethod: PaymentMethod.card,
       );
+      await db.into(db.customersTable).insert(
+            CustomersTableCompanion.insert(id: const Value('c2'), name: 'Doña Carmen Ruiz'),
+          );
       await sales.registerSale(
         sessionId: session.id,
         lines: [_line(cola, 1)],
         paymentMethod: PaymentMethod.credit,
         customerId: 'c2',
-        customerName: 'Doña Carmen Ruiz',
       );
 
       final current = await cash.watchCurrent().first;
@@ -190,7 +203,7 @@ void main() {
 
       await (db.delete(db.productsTable)..where((row) => row.id.equals(cola.id))).go();
 
-      final history = await sales.watchSince(DateTime(2000)).first;
+      final history = await sales.watchBetween(DateTime(2000)).first;
       final saved = history.single;
       expect(saved.id, sale.id);
       expect(saved.items.single.productName, 'Coca-Cola Lata 355ml');
@@ -245,7 +258,7 @@ void main() {
       final second = AppDatabase.forTesting(NativeDatabase(dbFile));
       addTearDown(second.close);
       final current = await DriftCashRepository(second).watchCurrent().first;
-      final history = await DriftSaleRepository(second).watchSince(DateTime(2000)).first;
+      final history = await DriftSaleRepository(second).watchBetween(DateTime(2000)).first;
 
       expect(current, isNotNull);
       expect(current!.id, session.id);
@@ -261,6 +274,8 @@ void main() {
 
       // 2. La devolvemos al estado de la v7: sin tablas de ventas/caja.
       await _revertProductsToDecimalPrices(seeded);
+      await seeded.customStatement('DROP TABLE customer_account_movements');
+      await seeded.customStatement('DROP TABLE customers');
       for (final table in ['cash_movements', 'sale_items', 'sales', 'cash_sessions']) {
         await seeded.customStatement('DROP TABLE $table');
       }
@@ -288,6 +303,7 @@ void main() {
       final seeded = await _seededDb(AppDatabase.forTesting(NativeDatabase(dbFile)));
       final count = (await seeded.select(seeded.productsTable).get()).length;
       await _revertProductsToDecimalPrices(seeded);
+      await _revertToV9Sales(seeded);
       // Un precio con el clásico error de punto flotante: 19.99 * 100 = 1998.9999...
       await seeded.customStatement(
         "UPDATE products SET price = 19.99, cost = 12.5 WHERE name = 'Bolillo'",

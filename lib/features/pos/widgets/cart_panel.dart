@@ -100,13 +100,17 @@ class _CartPanelState extends State<CartPanel> {
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: DropdownButtonFormField<String>(
+            child: DropdownButtonFormField<String?>(
               key: ValueKey(pos.selectedCustomerId),
-              initialValue: pos.selectedCustomerId ?? customers.first.id,
+              // Si el cliente seleccionado ya no existe, vuelve a "Público general".
+              initialValue: customers.any((c) => c.id == pos.selectedCustomerId)
+                  ? pos.selectedCustomerId
+                  : null,
               decoration: const InputDecoration(labelText: 'Cliente'),
               items: [
+                const DropdownMenuItem<String?>(value: null, child: Text('Público general')),
                 for (final Customer c in customers)
-                  DropdownMenuItem(
+                  DropdownMenuItem<String?>(
                     value: c.id,
                     child: Text(c.name, overflow: TextOverflow.ellipsis),
                   ),

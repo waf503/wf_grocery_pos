@@ -74,13 +74,13 @@ class ReportsScreen extends StatelessWidget {
                 children: [
                   Text('Ventas recientes', style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 8),
-                  if (sales.sales.isEmpty)
+                  if (sales.completedSales.isEmpty)
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 12),
                       child: Text('Aún no hay ventas registradas.'),
                     )
                   else
-                    for (final sale in sales.sales.take(10))
+                    for (final sale in sales.completedSales.take(10))
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         leading: const Icon(Icons.receipt_long_outlined),

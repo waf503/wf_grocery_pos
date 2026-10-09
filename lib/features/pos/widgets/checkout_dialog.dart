@@ -3,17 +3,22 @@ import 'package:flutter/material.dart';
 import '../../../core/format/formatters.dart';
 import '../../../models/sale.dart';
 
-Future<PaymentMethod?> showPaymentMethodDialog(BuildContext context, {required double total}) {
+Future<PaymentMethod?> showPaymentMethodDialog(
+  BuildContext context, {
+  required double total,
+  String? customerName,
+}) {
   return showDialog<PaymentMethod>(
     context: context,
-    builder: (context) => _PaymentMethodDialog(total: total),
+    builder: (context) => _PaymentMethodDialog(total: total, customerName: customerName),
   );
 }
 
 class _PaymentMethodDialog extends StatefulWidget {
-  const _PaymentMethodDialog({required this.total});
+  const _PaymentMethodDialog({required this.total, this.customerName});
 
   final double total;
+  final String? customerName;
 
   @override
   State<_PaymentMethodDialog> createState() => _PaymentMethodDialogState();
@@ -49,6 +54,9 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                       title: Text(method.label),
+                      subtitle: method == PaymentMethod.credit && widget.customerName == null
+                          ? const Text('Requiere seleccionar un cliente')
+                          : null,
                       value: method,
                     ),
                 ],
@@ -120,6 +128,7 @@ Future<void> showReceiptDialog(BuildContext context, Sale sale) {
             ),
             const SizedBox(height: 4),
             Text('Pago: ${sale.paymentMethod.label}'),
+            if (sale.customerName != null) Text('Cliente: ${sale.customerName}'),
           ],
         ),
       ),

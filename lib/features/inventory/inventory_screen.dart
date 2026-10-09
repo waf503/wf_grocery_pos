@@ -20,6 +20,7 @@ class InventoryScreen extends StatefulWidget {
 class _InventoryScreenState extends State<InventoryScreen> {
   String _query = '';
   String _category = 'Todas';
+  bool _lowStockOnly = false;
   Set<String> _selectedIds = {};
   final _scanController = TextEditingController();
   final _scanFocus = FocusNode();
@@ -174,7 +175,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
     final inventory = context.watch<InventoryProvider>();
     final categoryProvider = context.watch<CategoryProvider>();
     final scheme = Theme.of(context).colorScheme;
-    final products = inventory.search(query: _query, category: _category);
+    final products = inventory
+        .search(query: _query, category: _category)
+        .where((p) => !_lowStockOnly || p.isLowStock)
+        .toList();
     final existingIds = inventory.products.map((p) => p.id).toSet();
     final selectedIds = _selectedIds.intersection(existingIds);
     final inventoryValue = inventory.products.fold<double>(0, (sum, p) => sum + p.cost * p.stock);
@@ -252,6 +256,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
                             ],
                             onChanged: (value) => setState(() => _category = value!),
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        FilterChip(
+                          avatar: const Icon(Icons.warning_amber_rounded, size: 18),
+                          label: Text('Stock bajo (${inventory.lowStockProducts.length})'),
+                          selected: _lowStockOnly,
+                          onSelected: (value) => setState(() => _lowStockOnly = value),
                         ),
                       ],
                     ),

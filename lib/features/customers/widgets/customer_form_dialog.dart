@@ -2,22 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../../models/customer.dart';
 
-Future<Customer?> showCustomerFormDialog(
-  BuildContext context, {
-  Customer? existing,
-  required String Function() nextId,
-}) {
-  return showDialog<Customer>(
+/// Datos capturados en el formulario; el saldo no se edita a mano (sale del
+/// estado de cuenta).
+typedef CustomerFormData = ({String name, String? phone, String? email});
+
+Future<CustomerFormData?> showCustomerFormDialog(BuildContext context, {Customer? existing}) {
+  return showDialog<CustomerFormData>(
     context: context,
-    builder: (context) => _CustomerFormDialog(existing: existing, nextId: nextId),
+    builder: (context) => _CustomerFormDialog(existing: existing),
   );
 }
 
 class _CustomerFormDialog extends StatefulWidget {
-  const _CustomerFormDialog({this.existing, required this.nextId});
+  const _CustomerFormDialog({this.existing});
 
   final Customer? existing;
-  final String Function() nextId;
 
   @override
   State<_CustomerFormDialog> createState() => _CustomerFormDialogState();
@@ -48,14 +47,11 @@ class _CustomerFormDialogState extends State<_CustomerFormDialog> {
 
   void _submit() {
     if (!_formKey.currentState!.validate()) return;
-    final customer = Customer(
-      id: widget.existing?.id ?? widget.nextId(),
+    Navigator.of(context).pop((
       name: _name.text.trim(),
       phone: _phone.text.trim().isEmpty ? null : _phone.text.trim(),
       email: _email.text.trim().isEmpty ? null : _email.text.trim(),
-      balance: widget.existing?.balance ?? 0,
-    );
-    Navigator.of(context).pop(customer);
+    ));
   }
 
   @override

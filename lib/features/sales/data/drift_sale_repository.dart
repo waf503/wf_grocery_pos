@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 
 import '../../../core/database/app_database.dart';
 import '../../../models/cash_session.dart';
+import '../../../models/customer.dart';
 import '../../../models/sale.dart';
 import 'sale_repository.dart';
 
@@ -12,13 +13,14 @@ class DriftSaleRepository implements SaleRepository {
   final DateTime Function() _clock;
 
   @override
-  Stream<List<Sale>> watchSince(DateTime from) {
+  Stream<List<Sale>> watchBetween(DateTime from, {DateTime? to}) {
     final sales = _db.salesTable;
     final items = _db.saleItemsTable;
     final query = _db.select(sales).join([
       leftOuterJoin(items, items.saleId.equalsExp(sales.id)),
     ])
-      ..where(sales.createdAt.isBiggerOrEqualValue(from))
+      ..where(sales.createdAt.isBiggerOrEqualValue(from) &
+          (to == null ? const Constant(true) : sales.createdAt.isSmallerThanValue(to)))
       ..orderBy([OrderingTerm.desc(sales.createdAt), OrderingTerm.desc(sales.number)]);
 
     return query.watch().map((rows) {
@@ -50,6 +52,16 @@ class DriftSaleRepository implements SaleRepository {
             ..where((row) => row.id.equals(sessionId)))
           .getSingleOrNull();
       if (session == null || session.closedAt != null) throw CashSessionClosedException();
+
+      // El fiado necesita un cliente real al que cargarle la deuda.
+      if (paymentMethod == PaymentMethod.credit) {
+        final customer = customerId == null
+            ? null
+            : await (_db.select(_db.customersTable)..where((row) => row.id.equals(customerId)))
+                .getSingleOrNull();
+        if (customer == null) throw CreditRequiresCustomerException();
+        customerName = customer.name;
+      }
 
       // 1. Validar existencias (sumando por si un producto viene repetido).
       final requested = <String, double>{};
@@ -128,7 +140,97 @@ class DriftSaleRepository implements SaleRepository {
             );
       }
 
+      // 6. El fiado carga el saldo del cliente en su estado de cuenta.
+      if (paymentMethod == PaymentMethod.credit && totalCents > 0) {
+        await _db.into(_db.customerMovementsTable).insert(
+              CustomerMovementsTableCompanion.insert(
+                customerId: customerId!,
+                type: CustomerMovementType.charge,
+                amountCents: totalCents,
+                saleId: Value(sale.id),
+                note: 'Venta V-${sale.number.toString().padLeft(6, '0')}',
+                createdAt: now,
+              ),
+            );
+      }
+
       return _toModel(sale, itemRows);
+    });
+  }
+
+  @override
+  Future<void> voidSale({
+    required String saleId,
+    required String reason,
+    String? cashSessionId,
+  }) {
+    return _db.transaction(() async {
+      final sale = await (_db.select(_db.salesTable)..where((row) => row.id.equals(saleId)))
+          .getSingleOrNull();
+      if (sale == null) throw SaleNotFoundException();
+      if (sale.status == SaleStatus.voided) throw SaleAlreadyVoidedException();
+
+      final now = _clock();
+      final folio = 'V-${sale.number.toString().padLeft(6, '0')}';
+
+      // Efectivo: se saca de la caja ABIERTA (la de la venta puede estar
+      // cerrada ya); validar antes de tocar nada.
+      if (sale.paymentMethod == PaymentMethod.cash && sale.totalCents > 0) {
+        final session = cashSessionId == null
+            ? null
+            : await (_db.select(_db.cashSessionsTable)..where((row) => row.id.equals(cashSessionId)))
+                .getSingleOrNull();
+        if (session == null || session.closedAt != null) throw CashSessionClosedException();
+        await _db.into(_db.cashMovementsTable).insert(
+              CashMovementsTableCompanion.insert(
+                sessionId: cashSessionId!,
+                type: CashMovementType.withdrawal,
+                amountCents: sale.totalCents,
+                note: 'Anulación $folio',
+                createdAt: now,
+              ),
+            );
+      }
+
+      // Devolver existencias. Si el producto ya no existe, el UPDATE no
+      // afecta ninguna fila (no es error).
+      final items = await (_db.select(_db.saleItemsTable)..where((row) => row.saleId.equals(saleId))).get();
+      for (final item in items) {
+        if (item.productId == null) continue;
+        await _db.customUpdate(
+          'UPDATE products SET stock = stock + ? WHERE id = ?',
+          variables: [Variable<double>(item.quantity), Variable<String>(item.productId!)],
+          updates: {_db.productsTable},
+          updateKind: UpdateKind.update,
+        );
+      }
+
+      // Fiado: se revierte el cargo, si el cliente todavía existe.
+      if (sale.paymentMethod == PaymentMethod.credit && sale.customerId != null && sale.totalCents > 0) {
+        final customer = await (_db.select(_db.customersTable)
+              ..where((row) => row.id.equals(sale.customerId!)))
+            .getSingleOrNull();
+        if (customer != null) {
+          await _db.into(_db.customerMovementsTable).insert(
+                CustomerMovementsTableCompanion.insert(
+                  customerId: customer.id,
+                  type: CustomerMovementType.reversal,
+                  amountCents: sale.totalCents,
+                  saleId: Value(saleId),
+                  note: 'Anulación $folio',
+                  createdAt: now,
+                ),
+              );
+        }
+      }
+
+      await (_db.update(_db.salesTable)..where((row) => row.id.equals(saleId))).write(
+        SalesTableCompanion(
+          status: const Value(SaleStatus.voided),
+          voidedAt: Value(now),
+          voidReason: Value(reason),
+        ),
+      );
     });
   }
 
@@ -141,6 +243,9 @@ class DriftSaleRepository implements SaleRepository {
       paymentMethod: sale.paymentMethod,
       customerId: sale.customerId,
       customerName: sale.customerName,
+      status: sale.status,
+      voidedAt: sale.voidedAt,
+      voidReason: sale.voidReason,
       items: [
         for (final item in items)
           SaleItem(

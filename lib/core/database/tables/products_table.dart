@@ -32,6 +32,10 @@ class ProductsTable extends Table {
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)();
 
+  /// Última vez que se editó el producto. Nulo = nunca se ha editado (se
+  /// muestra la fecha de creación).
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

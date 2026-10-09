@@ -7,6 +7,8 @@ import '../../../models/product.dart';
 import '../../../shared/widgets/empty_state.dart';
 
 const double _checkWidth = 56;
+const double _barcodeWidth = 150;
+const double _dateWidth = 110;
 const double _priceWidth = 120;
 const double _costWidth = 120;
 const double _stockWidth = 150;
@@ -56,7 +58,7 @@ class ProductTable extends StatelessWidget {
         return SingleChildScrollView(
           scrollDirection: Axis.horizontal,
           child: SizedBox(
-            width: math.max(constraints.maxWidth, 860),
+            width: math.max(constraints.maxWidth, 1340),
             child: Column(
               children: [
                 _HeaderRow(
@@ -95,46 +97,51 @@ class _RowShell extends StatelessWidget {
     required this.check,
     required this.product,
     required this.category,
+    required this.barcode,
+    required this.created,
+    required this.updated,
     required this.price,
     required this.cost,
     required this.stock,
     required this.actions,
     this.color,
-    this.onTap,
     this.height = 60,
   });
 
   final Widget check;
   final Widget product;
   final Widget category;
+  final Widget barcode;
+  final Widget created;
+  final Widget updated;
   final Widget price;
   final Widget cost;
   final Widget stock;
   final Widget actions;
   final Color? color;
-  final VoidCallback? onTap;
   final double height;
 
   @override
   Widget build(BuildContext context) {
     return Material(
       color: color ?? Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        child: SizedBox(
-          height: height,
-          child: Row(
-            children: [
-              SizedBox(width: _checkWidth, child: Center(child: check)),
-              Expanded(flex: 4, child: Align(alignment: Alignment.centerLeft, child: product)),
-              Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: category)),
-              SizedBox(width: _priceWidth, child: Align(alignment: Alignment.centerRight, child: price)),
-              SizedBox(width: _costWidth, child: Align(alignment: Alignment.centerRight, child: cost)),
-              SizedBox(width: _stockWidth, child: Align(alignment: Alignment.center, child: stock)),
-              SizedBox(width: _actionsWidth, child: Align(alignment: Alignment.centerRight, child: actions)),
-              const SizedBox(width: 8),
-            ],
-          ),
+      // Sin InkWell/onTap: la fila no es clicable; solo el checkbox selecciona.
+      child: SizedBox(
+        height: height,
+        child: Row(
+          children: [
+            SizedBox(width: _checkWidth, child: Center(child: check)),
+            Expanded(flex: 4, child: Align(alignment: Alignment.centerLeft, child: product)),
+            Expanded(flex: 2, child: Align(alignment: Alignment.centerLeft, child: category)),
+            SizedBox(width: _barcodeWidth, child: Align(alignment: Alignment.centerLeft, child: barcode)),
+            SizedBox(width: _dateWidth, child: Align(alignment: Alignment.centerLeft, child: created)),
+            SizedBox(width: _dateWidth, child: Align(alignment: Alignment.centerLeft, child: updated)),
+            SizedBox(width: _priceWidth, child: Align(alignment: Alignment.centerRight, child: price)),
+            SizedBox(width: _costWidth, child: Align(alignment: Alignment.centerRight, child: cost)),
+            SizedBox(width: _stockWidth, child: Align(alignment: Alignment.center, child: stock)),
+            SizedBox(width: _actionsWidth, child: Align(alignment: Alignment.centerRight, child: actions)),
+            const SizedBox(width: 8),
+          ],
         ),
       ),
     );
@@ -160,6 +167,9 @@ class _HeaderRow extends StatelessWidget {
       check: Checkbox(tristate: true, value: selection, onChanged: (_) => onToggleAll()),
       product: Text('Producto', style: style),
       category: Text('Categoría', style: style),
+      barcode: Text('Código de barras', style: style),
+      created: Text('Creado', style: style),
+      updated: Text('Actualizado', style: style),
       price: Text('Precio', style: style),
       cost: Text('Costo', style: style),
       stock: Text('Stock', style: style),
@@ -188,28 +198,26 @@ class _ProductRow extends StatelessWidget {
     final scheme = Theme.of(context).colorScheme;
     final textTheme = Theme.of(context).textTheme;
     final barcode = product.barcode;
+    final muted = TextStyle(color: scheme.onSurfaceVariant);
     return _RowShell(
       color: selected ? scheme.primaryContainer.withValues(alpha: 0.4) : null,
-      onTap: () => onSelectedChanged(!selected),
       check: Checkbox(value: selected, onChanged: (v) => onSelectedChanged(v ?? false)),
-      product: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            product.name,
-            style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (barcode != null && barcode.isNotEmpty)
-            Text(
-              barcode,
-              style: textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
-              overflow: TextOverflow.ellipsis,
-            ),
-        ],
+      product: Text(
+        product.name,
+        style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+        overflow: TextOverflow.ellipsis,
       ),
       category: Text(product.category, overflow: TextOverflow.ellipsis),
+      barcode: Text(
+        (barcode == null || barcode.isEmpty) ? '—' : barcode,
+        style: muted,
+        overflow: TextOverflow.ellipsis,
+      ),
+      created: Text(dateFormatFull.format(product.createdAt), style: muted),
+      updated: Tooltip(
+        message: dateTimeFormat.format(product.updatedAt),
+        child: Text(dateFormatFull.format(product.updatedAt), style: muted),
+      ),
       price: Text(formatCurrency(product.price), style: const TextStyle(fontWeight: FontWeight.w600)),
       cost: Text(formatCurrency(product.cost), style: TextStyle(color: scheme.onSurfaceVariant)),
       stock: _StockPill(product: product),

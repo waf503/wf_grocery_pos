@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 
 import 'core/database/app_database.dart';
@@ -6,6 +7,7 @@ import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/cash/data/drift_cash_repository.dart';
 import 'features/categories/data/drift_category_repository.dart';
+import 'features/customers/data/drift_customer_repository.dart';
 import 'features/products/data/drift_product_repository.dart';
 import 'features/sales/data/drift_sale_repository.dart';
 import 'features/units/data/drift_unit_repository.dart';
@@ -44,7 +46,10 @@ class GroceryPosApp extends StatelessWidget {
           lazy: false,
           create: (_) => InventoryProvider(DriftProductRepository(database)),
         ),
-        ChangeNotifierProvider(create: (_) => CustomerProvider()),
+        ChangeNotifierProvider(
+          lazy: false,
+          create: (_) => CustomerProvider(DriftCustomerRepository(database)),
+        ),
         ChangeNotifierProvider(
           lazy: false,
           create: (_) => SalesProvider(DriftSaleRepository(database)),
@@ -58,6 +63,10 @@ class GroceryPosApp extends StatelessWidget {
       child: MaterialApp.router(
         title: 'Mi Tienda POS',
         debugShowCheckedModeBanner: false,
+        // Textos de los componentes de Material (selector de fechas, etc.) en español.
+        locale: const Locale('es', 'MX'),
+        supportedLocales: const [Locale('es', 'MX'), Locale('es')],
+        localizationsDelegates: GlobalMaterialLocalizations.delegates,
         theme: AppTheme.light(),
         routerConfig: appRouter,
       ),

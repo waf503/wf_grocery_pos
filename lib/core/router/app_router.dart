@@ -7,6 +7,7 @@ import '../../features/dashboard/dashboard_screen.dart';
 import '../../features/inventory/inventory_screen.dart';
 import '../../features/pos/pos_screen.dart';
 import '../../features/reports/reports_screen.dart';
+import '../../features/sales/sales_screen.dart';
 import '../../features/units/units_screen.dart';
 import '../../shared/widgets/app_shell.dart';
 
@@ -21,6 +22,9 @@ final GoRouter appRouter = GoRouter(
         ]),
         StatefulShellBranch(routes: [
           GoRoute(path: '/pos', builder: (context, state) => const PosScreen()),
+        ]),
+        StatefulShellBranch(routes: [
+          GoRoute(path: '/sales', builder: (context, state) => const SalesScreen()),
         ]),
         StatefulShellBranch(routes: [
           GoRoute(path: '/inventory', builder: (context, state) => const InventoryScreen()),

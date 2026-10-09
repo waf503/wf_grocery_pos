@@ -48,7 +48,7 @@ class DriftProductRepository implements ProductRepository {
   @override
   Future<void> update(ProductsTableCompanion product) {
     return (_db.update(_db.productsTable)..where((row) => row.id.equals(product.id.value)))
-        .write(product);
+        .write(product.copyWith(updatedAt: Value(DateTime.now())));
   }
 
   @override
@@ -79,6 +79,8 @@ class DriftProductRepository implements ProductRepository {
       minStock: row.minStock,
       barcode: row.barcode,
       tags: row.tags,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt ?? row.createdAt,
     );
   }
 }

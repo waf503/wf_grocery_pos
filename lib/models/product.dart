@@ -20,6 +20,8 @@ class Product {
     this.minStock = 5,
     this.barcode,
     this.tags = '',
+    required this.createdAt,
+    required this.updatedAt,
   });
 
   final String id;
@@ -39,6 +41,10 @@ class Product {
   final double minStock;
   final String? barcode;
   final String tags;
+  final DateTime createdAt;
+
+  /// Última edición del producto; si nunca se editó, su fecha de creación.
+  final DateTime updatedAt;
 
   double get price => fromCents(priceCents);
   double get cost => fromCents(costCents);

@@ -19,6 +19,7 @@ Future<Map<String, String>> seedUnitsIfEmpty(AppDatabase db) async {
             name: name,
             abbreviation: Value(abbreviation),
             allowsDecimals: Value(decimals),
+            saleStep: Value(decimals ? 0.5 : 1),
           ),
         );
     ids[name] = row.id;

@@ -22,7 +22,7 @@ class PosProvider extends ChangeNotifier {
   String? get activeProductId => _activeProductId;
   int get addSerial => _addSerial;
   bool get isEmpty => _cart.isEmpty;
-  int get itemCount => _cart.fold(0, (sum, item) => sum + item.quantity);
+  double get itemCount => _cart.fold(0.0, (sum, item) => sum + item.quantity);
   int get totalCents => _cart.fold(0, (sum, item) => sum + item.subtotalCents);
   double get total => fromCents(totalCents);
 
@@ -31,24 +31,44 @@ class PosProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addProduct(Product product) {
+  /// Cuánto suman el + / − y un clic: 1 para piezas, o el incremento de la
+  /// unidad para productos por peso (0.5 = media libra).
+  double _stepOf(Product product) => product.allowsDecimals ? product.quantityStep : 1;
+
+  /// Redondea a milésimas para no arrastrar ruido de punto flotante.
+  double _round(double value) => (value * 1000).round() / 1000;
+
+  /// Agrega [quantity] (por defecto un incremento) del producto; si ya está
+  /// en el carrito, suma a su renglón.
+  void addProduct(Product product, {double? quantity}) {
+    final amount = quantity ?? _stepOf(product);
     _activeProductId = product.id;
     _addSerial++;
     for (final item in _cart) {
       if (item.product.id == product.id) {
-        item.quantity++;
+        item.quantity = _round(item.quantity + amount);
         notifyListeners();
         return;
       }
     }
-    _cart.add(CartItem(product: product));
+    _cart.add(CartItem(product: product, quantity: _round(amount)));
+    notifyListeners();
+  }
+
+  /// Agrega una venta genérica (algo que no está en el inventario). Cada
+  /// una es su propio renglón, aunque se repita el nombre.
+  void addGeneric({required String name, required int priceCents, int quantity = 1}) {
+    final product = Product.generic(name: name, priceCents: priceCents);
+    _activeProductId = product.id;
+    _addSerial++;
+    _cart.add(CartItem(product: product, quantity: quantity.toDouble()));
     notifyListeners();
   }
 
   void incrementQuantity(String productId) {
     for (final item in _cart) {
       if (item.product.id == productId) {
-        item.quantity++;
+        item.quantity = _round(item.quantity + _stepOf(item.product));
         _activeProductId = productId;
         notifyListeners();
         return;
@@ -59,13 +79,30 @@ class PosProvider extends ChangeNotifier {
   void decrementQuantity(String productId) {
     for (final item in _cart) {
       if (item.product.id == productId) {
-        if (item.quantity <= 1) {
+        final step = _stepOf(item.product);
+        if (item.quantity <= step + 1e-9) {
           _cart.remove(item);
           if (_activeProductId == productId) _activeProductId = null;
         } else {
-          item.quantity--;
+          item.quantity = _round(item.quantity - step);
           _activeProductId = productId;
         }
+        notifyListeners();
+        return;
+      }
+    }
+  }
+
+  /// Fija la cantidad exacta de un renglón (p. ej. 2.5 lb). Cero o menos lo quita.
+  void setQuantity(String productId, double quantity) {
+    if (quantity <= 0) {
+      removeItem(productId);
+      return;
+    }
+    for (final item in _cart) {
+      if (item.product.id == productId) {
+        item.quantity = _round(quantity);
+        _activeProductId = productId;
         notifyListeners();
         return;
       }

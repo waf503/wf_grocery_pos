@@ -279,6 +279,7 @@ void main() {
       for (final table in ['cash_movements', 'sale_items', 'sales', 'cash_sessions']) {
         await seeded.customStatement('DROP TABLE $table');
       }
+      await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
       await seeded.customStatement('PRAGMA user_version = 7');
       await seeded.close();
 
@@ -308,6 +309,7 @@ void main() {
       await seeded.customStatement(
         "UPDATE products SET price = 19.99, cost = 12.5 WHERE name = 'Bolillo'",
       );
+      await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
       await seeded.customStatement('PRAGMA user_version = 8');
       await seeded.close();
 

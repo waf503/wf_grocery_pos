@@ -2,6 +2,10 @@ import '../../../models/sale.dart';
 
 /// Un renglón que se quiere vender: producto, cantidad y la foto de precio
 /// y costo vigentes en este momento (en centavos).
+///
+/// Si [productId] es nulo es una VENTA GENÉRICA: algo que no está en el
+/// inventario (nombre y precio escritos por el cajero). No toca existencias
+/// y su costo es 0 (se desconoce).
 class SaleLine {
   SaleLine({
     required this.productId,
@@ -11,13 +15,15 @@ class SaleLine {
     required this.unitCostCents,
   });
 
-  final String productId;
+  final String? productId;
   final String productName;
   final double quantity;
   final int unitPriceCents;
   final int unitCostCents;
 
   int get subtotalCents => (quantity * unitPriceCents).round();
+
+  bool get isGeneric => productId == null;
 }
 
 /// No hay existencias suficientes de un producto para completar la venta.

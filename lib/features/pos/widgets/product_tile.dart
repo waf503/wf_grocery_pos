@@ -70,7 +70,7 @@ class ProductTile extends StatelessWidget {
                 Text(
                   outOfStock
                       ? 'Sin existencias'
-                      : '${product.stock} ${product.unit} disp.',
+                      : '${formatQuantity(product.stock)} ${product.unit} disp.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: outOfStock ? scheme.error : scheme.onSurfaceVariant,
                   ),

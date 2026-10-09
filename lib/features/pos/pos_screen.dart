@@ -14,6 +14,8 @@ import '../../state/sales_provider.dart';
 import '../sales/data/sale_repository.dart';
 import 'widgets/cart_panel.dart';
 import 'widgets/checkout_dialog.dart';
+import 'widgets/generic_item_dialog.dart';
+import 'widgets/quantity_dialog.dart';
 import 'widgets/product_grid.dart';
 
 class PosScreen extends StatefulWidget {
@@ -77,12 +79,33 @@ class _PosScreenState extends State<PosScreen> {
     _addToCart(product);
   }
 
+  /// Venta de algo que no está en el inventario: el cajero escribe
+  /// descripción, precio y cantidad, y entra al carrito como un renglón más.
+  Future<void> _addGeneric() async {
+    final item = await showGenericItemDialog(context);
+    if (!mounted) return;
+    if (item != null) {
+      context.read<PosProvider>().addGeneric(
+            name: item.name,
+            priceCents: item.priceCents,
+            quantity: item.quantity,
+          );
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.success,
+        title: item.name,
+        message: '${formatCurrency(item.priceCents / 100)} · venta genérica',
+      );
+    }
+    _scanFocus.requestFocus();
+  }
+
   void _clearField() {
     _scanController.clear();
     setState(() => _query = '');
   }
 
-  void _addToCart(Product product) {
+  Future<void> _addToCart(Product product) async {
     final pos = context.read<PosProvider>();
     if (product.stock <= 0) {
       FeedbackAlert.show(
@@ -93,26 +116,47 @@ class _PosScreenState extends State<PosScreen> {
       );
       return;
     }
-    var inCart = 0;
+    var inCart = 0.0;
     for (final item in pos.cart) {
       if (item.product.id == product.id) inCart = item.quantity;
     }
-    if (inCart + 1 > product.stock) {
+
+    // Los productos por peso (libras, kilos...) piden la cantidad; los de
+    // pieza suman 1 con cada clic o escaneo.
+    var quantity = 1.0;
+    if (product.allowsDecimals) {
+      final entered = await showQuantityDialog(
+        context,
+        product: product,
+        available: product.stock - inCart,
+      );
+      if (!mounted) return;
+      if (entered == null) {
+        _scanFocus.requestFocus();
+        return;
+      }
+      quantity = entered;
+    }
+
+    if (inCart + quantity > product.stock + 1e-9) {
       FeedbackAlert.show(
         context,
         type: FeedbackType.warning,
         title: 'Existencias insuficientes',
-        message: 'Solo hay ${product.stock} de ${product.name}',
+        message: 'Solo hay ${formatQuantity(product.stock)} ${product.unit} de ${product.name}',
       );
+      _scanFocus.requestFocus();
       return;
     }
-    pos.addProduct(product);
+    pos.addProduct(product, quantity: quantity);
     FeedbackAlert.show(
       context,
       type: FeedbackType.success,
       title: product.name,
-      message: '${formatCurrency(product.price)}  ·  ${inCart + 1} en el carrito',
+      message: '${formatCurrency(product.price)}  ·  ${formatQuantity(inCart + quantity)}'
+          '${product.allowsDecimals ? ' ${product.unit}' : ''} en el carrito',
     );
+    _scanFocus.requestFocus();
   }
 
   Future<void> _checkout() async {
@@ -155,9 +199,9 @@ class _PosScreenState extends State<PosScreen> {
     final lines = [
       for (final item in pos.cart)
         SaleLine(
-          productId: item.product.id,
+          productId: item.product.isGeneric ? null : item.product.id,
           productName: item.product.name,
-          quantity: item.quantity.toDouble(),
+          quantity: item.quantity,
           unitPriceCents: item.product.priceCents,
           unitCostCents: item.product.costCents,
         ),
@@ -223,16 +267,28 @@ class _PosScreenState extends State<PosScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                  child: TextField(
-                    controller: _scanController,
-                    focusNode: _scanFocus,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      prefixIcon: Icon(Icons.qr_code_scanner),
-                      hintText: 'Escanea un código o busca por nombre...',
-                    ),
-                    onChanged: (value) => setState(() => _query = value),
-                    onSubmitted: _onSubmit,
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _scanController,
+                          focusNode: _scanFocus,
+                          autofocus: true,
+                          decoration: const InputDecoration(
+                            prefixIcon: Icon(Icons.qr_code_scanner),
+                            hintText: 'Escanea un código o busca por nombre...',
+                          ),
+                          onChanged: (value) => setState(() => _query = value),
+                          onSubmitted: _onSubmit,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      FilledButton.tonalIcon(
+                        onPressed: _addGeneric,
+                        icon: const Icon(Icons.add_shopping_cart),
+                        label: const Text('Venta genérica'),
+                      ),
+                    ],
                   ),
                 ),
                 SizedBox(
@@ -269,10 +325,7 @@ class _PosScreenState extends State<PosScreen> {
                   child: ProductGrid(
                     products: products,
                     categoryColorFor: categoryProvider.colorValueFor,
-                    onSelect: (product) {
-                      _addToCart(product);
-                      _scanFocus.requestFocus();
-                    },
+                    onSelect: _addToCart,
                   ),
                 ),
               ],

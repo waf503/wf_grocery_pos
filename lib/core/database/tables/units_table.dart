@@ -22,6 +22,11 @@ class UnitsTable extends Table {
   /// unidades "por pieza" no: no se puede tener 2.5 gaseosas.
   BoolColumn get allowsDecimals => boolean().withDefault(const Constant(false))();
 
+  /// Incremento mínimo de venta para unidades con decimales: 0.5 = se vende
+  /// de media en media (media libra, una libra, libra y media...). Las
+  /// unidades enteras venden de 1 en 1.
+  RealColumn get saleStep => real().withDefault(const Constant(1))();
+
   BoolColumn get active => boolean().withDefault(const Constant(true))();
   DateTimeColumn get createdAt =>
       dateTime().withDefault(currentDateAndTime)();

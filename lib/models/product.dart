@@ -14,6 +14,7 @@ class Product {
     required this.unitId,
     required this.unit,
     this.allowsDecimals = false,
+    this.quantityStep = 1,
     required this.priceCents,
     required this.costCents,
     required this.stock,
@@ -22,7 +23,29 @@ class Product {
     this.tags = '',
     required this.createdAt,
     required this.updatedAt,
+    this.isGeneric = false,
   });
+
+  /// Renglón de VENTA GENÉRICA: algo que no está en el inventario, con el
+  /// nombre y el precio que escribe el cajero. No es un producto real (no se
+  /// guarda en el inventario ni tiene existencias); solo vive en el carrito.
+  factory Product.generic({required String name, required int priceCents}) {
+    final now = DateTime.now();
+    return Product(
+      id: 'generic_${now.microsecondsSinceEpoch}',
+      name: name,
+      categoryId: '',
+      category: 'Varios',
+      unitId: '',
+      unit: 'pz',
+      priceCents: priceCents,
+      costCents: 0,
+      stock: 0,
+      createdAt: now,
+      updatedAt: now,
+      isGeneric: true,
+    );
+  }
 
   final String id;
   final String name;
@@ -34,6 +57,9 @@ class Product {
   final String unit;
   final bool allowsDecimals;
 
+  /// Incremento mínimo de venta de su unidad (0.5 = de media en media).
+  final double quantityStep;
+
   /// Precio de venta y costo en centavos enteros.
   final int priceCents;
   final int costCents;
@@ -41,6 +67,7 @@ class Product {
   final double minStock;
   final String? barcode;
   final String tags;
+  final bool isGeneric;
   final DateTime createdAt;
 
   /// Última edición del producto; si nunca se editó, su fecha de creación.

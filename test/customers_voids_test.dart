@@ -249,6 +249,7 @@ void main() {
       await seeded.customStatement('ALTER TABLE sales DROP COLUMN voided_at');
       await seeded.customStatement('ALTER TABLE sales DROP COLUMN void_reason');
       await seeded.customStatement('ALTER TABLE products DROP COLUMN updated_at');
+      await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
       await seeded.customStatement('PRAGMA user_version = 9');
       await seeded.close();
 

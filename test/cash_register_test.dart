@@ -198,6 +198,7 @@ void main() {
       await insert('withdrawal', 'Anulación V-000001');
       await insert('deposit', 'Cambio inicial');
       await insert('withdrawal', 'Pago a proveedor');
+      await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
       await seeded.customStatement('PRAGMA user_version = 11');
       await seeded.close();
 

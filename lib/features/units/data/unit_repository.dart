@@ -19,6 +19,7 @@ abstract class UnitRepository {
     required String name,
     String? abbreviation,
     required bool allowsDecimals,
+    double saleStep = 1,
   });
 
   Future<void> update(Unit unit);

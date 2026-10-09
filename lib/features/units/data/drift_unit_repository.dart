@@ -22,12 +22,14 @@ class DriftUnitRepository implements UnitRepository {
     required String name,
     String? abbreviation,
     required bool allowsDecimals,
+    double saleStep = 1,
   }) async {
     await _db.into(_db.unitsTable).insert(
           UnitsTableCompanion.insert(
             name: name,
             abbreviation: Value(abbreviation),
             allowsDecimals: Value(allowsDecimals),
+            saleStep: Value(allowsDecimals ? saleStep : 1),
           ),
         );
   }
@@ -39,6 +41,7 @@ class DriftUnitRepository implements UnitRepository {
         name: Value(unit.name),
         abbreviation: Value(unit.abbreviation),
         allowsDecimals: Value(unit.allowsDecimals),
+        saleStep: Value(unit.allowsDecimals ? unit.saleStep : 1),
       ),
     );
   }
@@ -62,6 +65,7 @@ class DriftUnitRepository implements UnitRepository {
       name: row.name,
       abbreviation: row.abbreviation,
       allowsDecimals: row.allowsDecimals,
+      saleStep: row.saleStep,
     );
   }
 }

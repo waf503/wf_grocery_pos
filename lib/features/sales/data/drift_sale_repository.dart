@@ -79,15 +79,19 @@ class DriftSaleRepository implements SaleRepository {
 
       // 1. Validar existencias (sumando por si un producto viene repetido).
       final requested = <String, double>{};
+      // Los renglones genéricos (sin producto) no tienen existencias.
       for (final line in lines) {
-        requested[line.productId] = (requested[line.productId] ?? 0) + line.quantity;
+        final id = line.productId;
+        if (id == null) continue;
+        requested[id] = (requested[id] ?? 0) + line.quantity;
       }
       for (final line in lines) {
-        final product = await (_db.select(_db.productsTable)
-              ..where((row) => row.id.equals(line.productId)))
+        final id = line.productId;
+        if (id == null) continue;
+        final product = await (_db.select(_db.productsTable)..where((row) => row.id.equals(id)))
             .getSingleOrNull();
         if (product == null) throw ProductNotFoundException(line.productName);
-        if (product.stock < requested[line.productId]!) {
+        if (product.stock < requested[id]!) {
           throw InsufficientStockException(line.productName, available: product.stock);
         }
       }

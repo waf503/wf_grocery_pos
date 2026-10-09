@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/format/formatters.dart';
 import '../../models/unit.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/section_header.dart';
@@ -17,6 +18,7 @@ class UnitsScreen extends StatelessWidget {
       name: result.name,
       abbreviation: result.abbreviation,
       allowsDecimals: result.allowsDecimals,
+      saleStep: result.saleStep,
     );
   }
 
@@ -29,6 +31,7 @@ class UnitsScreen extends StatelessWidget {
         name: result.name,
         abbreviation: result.abbreviation,
         allowsDecimals: result.allowsDecimals,
+        saleStep: result.saleStep,
       ),
     );
   }
@@ -113,7 +116,11 @@ class UnitsScreen extends StatelessWidget {
                             ),
                           ),
                           title: Text(unit.name),
-                          subtitle: Text(unit.allowsDecimals ? 'Permite decimales' : 'Solo cantidades enteras'),
+                          subtitle: Text(
+                            unit.allowsDecimals
+                                ? 'Permite decimales · se vende de ${formatQuantity(unit.saleStep)} en ${formatQuantity(unit.saleStep)}'
+                                : 'Solo cantidades enteras',
+                          ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [

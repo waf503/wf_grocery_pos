@@ -56,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   /// Migraciones. REGLA: desde la versión 8 hay datos reales de negocio
   /// (ventas y caja), así que cada cambio de esquema debe escribirse como un
@@ -135,6 +135,12 @@ class AppDatabase extends _$AppDatabase {
               "UPDATE cash_movements SET type = 'saleVoid' "
               "WHERE type = 'withdrawal' AND note LIKE 'Anulación V-%'",
             );
+          }
+          if (from < 13) {
+            // Incremento de venta por unidad: las unidades que ya permitían
+            // decimales pasan a venderse de media en media.
+            await m.addColumn(unitsTable, unitsTable.saleStep);
+            await customStatement('UPDATE units SET sale_step = 0.5 WHERE allows_decimals = 1');
           }
         },
         beforeOpen: (details) async {

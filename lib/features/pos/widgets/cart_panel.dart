@@ -2,11 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/format/formatters.dart';
+import '../../../models/cart_item.dart';
 import '../../../models/customer.dart';
 import '../../../state/category_provider.dart';
 import '../../../state/customer_provider.dart';
 import '../../../state/pos_provider.dart';
 import '../../../shared/widgets/empty_state.dart';
+import 'quantity_dialog.dart';
 
 class CartPanel extends StatefulWidget {
   const CartPanel({super.key, required this.onCheckout});
@@ -28,6 +30,18 @@ class _CartPanelState extends State<CartPanel> {
   void dispose() {
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// Permite teclear la cantidad exacta de un producto por peso.
+  Future<void> _editQuantity(BuildContext context, PosProvider pos, CartItem item) async {
+    final entered = await showQuantityDialog(
+      context,
+      product: item.product,
+      available: item.product.stock,
+      initial: item.quantity,
+      confirmLabel: 'Aceptar',
+    );
+    if (entered != null) pos.setQuantity(item.product.id, entered);
   }
 
   /// Cada vez que se agrega un producto, desplaza la lista lo justo para
@@ -166,7 +180,10 @@ class _CartPanelState extends State<CartPanel> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           subtitle: Text(
-                            '${formatCurrency(item.product.price)} c/u',
+                            item.product.allowsDecimals
+                                ? '${formatCurrency(item.product.price)} / ${item.product.unit}'
+                                : '${formatCurrency(item.product.price)} c/u'
+                                    '${item.product.isGeneric ? ' · genérico' : ''}',
                           ),
                           trailing: Row(
                             mainAxisSize: MainAxisSize.min,
@@ -177,10 +194,27 @@ class _CartPanelState extends State<CartPanel> {
                                 onPressed: () =>
                                     pos.decrementQuantity(item.product.id),
                               ),
-                              Text(
-                                '${item.quantity}',
-                                style: Theme.of(context).textTheme.titleSmall,
-                              ),
+                              item.product.allowsDecimals
+                                  // Por peso: tocar la cantidad permite teclear
+                                  // una exacta (p. ej. 2.5 lb).
+                                  ? Tooltip(
+                                      message: 'Cambiar cantidad',
+                                      child: InkWell(
+                                        borderRadius: BorderRadius.circular(6),
+                                        onTap: () => _editQuantity(context, pos, item),
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                          child: Text(
+                                            '${formatQuantity(item.quantity)} ${item.product.unit}',
+                                            style: Theme.of(context).textTheme.titleSmall,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  : Text(
+                                      formatQuantity(item.quantity),
+                                      style: Theme.of(context).textTheme.titleSmall,
+                                    ),
                               IconButton(
                                 icon: const Icon(Icons.add_circle_outline),
                                 iconSize: 20,
@@ -196,6 +230,14 @@ class _CartPanelState extends State<CartPanel> {
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(fontWeight: FontWeight.w600),
                                 ),
+                              ),
+                              // Quita el renglón completo, sin importar la cantidad.
+                              IconButton(
+                                icon: Icon(Icons.delete_outline, color: scheme.error),
+                                iconSize: 20,
+                                visualDensity: VisualDensity.compact,
+                                tooltip: 'Quitar del carrito',
+                                onPressed: () => pos.removeItem(item.product.id),
                               ),
                             ],
                           ),

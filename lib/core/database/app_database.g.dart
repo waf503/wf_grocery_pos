@@ -577,6 +577,18 @@ class $UnitsTableTable extends UnitsTable
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _saleStepMeta = const VerificationMeta(
+    'saleStep',
+  );
+  @override
+  late final GeneratedColumn<double> saleStep = GeneratedColumn<double>(
+    'sale_step',
+    aliasedName,
+    false,
+    type: DriftSqlType.double,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
   static const VerificationMeta _activeMeta = const VerificationMeta('active');
   @override
   late final GeneratedColumn<bool> active = GeneratedColumn<bool>(
@@ -608,6 +620,7 @@ class $UnitsTableTable extends UnitsTable
     name,
     abbreviation,
     allowsDecimals,
+    saleStep,
     active,
     createdAt,
   ];
@@ -652,6 +665,12 @@ class $UnitsTableTable extends UnitsTable
         ),
       );
     }
+    if (data.containsKey('sale_step')) {
+      context.handle(
+        _saleStepMeta,
+        saleStep.isAcceptableOrUnknown(data['sale_step']!, _saleStepMeta),
+      );
+    }
     if (data.containsKey('active')) {
       context.handle(
         _activeMeta,
@@ -689,6 +708,10 @@ class $UnitsTableTable extends UnitsTable
         DriftSqlType.bool,
         data['${effectivePrefix}allows_decimals'],
       )!,
+      saleStep: attachedDatabase.typeMapping.read(
+        DriftSqlType.double,
+        data['${effectivePrefix}sale_step'],
+      )!,
       active: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}active'],
@@ -719,6 +742,11 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
   /// Si la unidad admite cantidades fraccionarias (1.5 kg, 0.25 lb). Las
   /// unidades "por pieza" no: no se puede tener 2.5 gaseosas.
   final bool allowsDecimals;
+
+  /// Incremento mínimo de venta para unidades con decimales: 0.5 = se vende
+  /// de media en media (media libra, una libra, libra y media...). Las
+  /// unidades enteras venden de 1 en 1.
+  final double saleStep;
   final bool active;
   final DateTime createdAt;
   const UnitsTableData({
@@ -726,6 +754,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
     required this.name,
     this.abbreviation,
     required this.allowsDecimals,
+    required this.saleStep,
     required this.active,
     required this.createdAt,
   });
@@ -738,6 +767,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
       map['abbreviation'] = Variable<String>(abbreviation);
     }
     map['allows_decimals'] = Variable<bool>(allowsDecimals);
+    map['sale_step'] = Variable<double>(saleStep);
     map['active'] = Variable<bool>(active);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -751,6 +781,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
           ? const Value.absent()
           : Value(abbreviation),
       allowsDecimals: Value(allowsDecimals),
+      saleStep: Value(saleStep),
       active: Value(active),
       createdAt: Value(createdAt),
     );
@@ -766,6 +797,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
       name: serializer.fromJson<String>(json['name']),
       abbreviation: serializer.fromJson<String?>(json['abbreviation']),
       allowsDecimals: serializer.fromJson<bool>(json['allowsDecimals']),
+      saleStep: serializer.fromJson<double>(json['saleStep']),
       active: serializer.fromJson<bool>(json['active']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -778,6 +810,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
       'name': serializer.toJson<String>(name),
       'abbreviation': serializer.toJson<String?>(abbreviation),
       'allowsDecimals': serializer.toJson<bool>(allowsDecimals),
+      'saleStep': serializer.toJson<double>(saleStep),
       'active': serializer.toJson<bool>(active),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -788,6 +821,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
     String? name,
     Value<String?> abbreviation = const Value.absent(),
     bool? allowsDecimals,
+    double? saleStep,
     bool? active,
     DateTime? createdAt,
   }) => UnitsTableData(
@@ -795,6 +829,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
     name: name ?? this.name,
     abbreviation: abbreviation.present ? abbreviation.value : this.abbreviation,
     allowsDecimals: allowsDecimals ?? this.allowsDecimals,
+    saleStep: saleStep ?? this.saleStep,
     active: active ?? this.active,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -808,6 +843,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
       allowsDecimals: data.allowsDecimals.present
           ? data.allowsDecimals.value
           : this.allowsDecimals,
+      saleStep: data.saleStep.present ? data.saleStep.value : this.saleStep,
       active: data.active.present ? data.active.value : this.active,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -820,6 +856,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
           ..write('name: $name, ')
           ..write('abbreviation: $abbreviation, ')
           ..write('allowsDecimals: $allowsDecimals, ')
+          ..write('saleStep: $saleStep, ')
           ..write('active: $active, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -827,8 +864,15 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
   }
 
   @override
-  int get hashCode =>
-      Object.hash(id, name, abbreviation, allowsDecimals, active, createdAt);
+  int get hashCode => Object.hash(
+    id,
+    name,
+    abbreviation,
+    allowsDecimals,
+    saleStep,
+    active,
+    createdAt,
+  );
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
@@ -837,6 +881,7 @@ class UnitsTableData extends DataClass implements Insertable<UnitsTableData> {
           other.name == this.name &&
           other.abbreviation == this.abbreviation &&
           other.allowsDecimals == this.allowsDecimals &&
+          other.saleStep == this.saleStep &&
           other.active == this.active &&
           other.createdAt == this.createdAt);
 }
@@ -846,6 +891,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
   final Value<String> name;
   final Value<String?> abbreviation;
   final Value<bool> allowsDecimals;
+  final Value<double> saleStep;
   final Value<bool> active;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
@@ -854,6 +900,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
     this.name = const Value.absent(),
     this.abbreviation = const Value.absent(),
     this.allowsDecimals = const Value.absent(),
+    this.saleStep = const Value.absent(),
     this.active = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -863,6 +910,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
     required String name,
     this.abbreviation = const Value.absent(),
     this.allowsDecimals = const Value.absent(),
+    this.saleStep = const Value.absent(),
     this.active = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -872,6 +920,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
     Expression<String>? name,
     Expression<String>? abbreviation,
     Expression<bool>? allowsDecimals,
+    Expression<double>? saleStep,
     Expression<bool>? active,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -881,6 +930,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
       if (name != null) 'name': name,
       if (abbreviation != null) 'abbreviation': abbreviation,
       if (allowsDecimals != null) 'allows_decimals': allowsDecimals,
+      if (saleStep != null) 'sale_step': saleStep,
       if (active != null) 'active': active,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -892,6 +942,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
     Value<String>? name,
     Value<String?>? abbreviation,
     Value<bool>? allowsDecimals,
+    Value<double>? saleStep,
     Value<bool>? active,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -901,6 +952,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
       name: name ?? this.name,
       abbreviation: abbreviation ?? this.abbreviation,
       allowsDecimals: allowsDecimals ?? this.allowsDecimals,
+      saleStep: saleStep ?? this.saleStep,
       active: active ?? this.active,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -922,6 +974,9 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
     if (allowsDecimals.present) {
       map['allows_decimals'] = Variable<bool>(allowsDecimals.value);
     }
+    if (saleStep.present) {
+      map['sale_step'] = Variable<double>(saleStep.value);
+    }
     if (active.present) {
       map['active'] = Variable<bool>(active.value);
     }
@@ -941,6 +996,7 @@ class UnitsTableCompanion extends UpdateCompanion<UnitsTableData> {
           ..write('name: $name, ')
           ..write('abbreviation: $abbreviation, ')
           ..write('allowsDecimals: $allowsDecimals, ')
+          ..write('saleStep: $saleStep, ')
           ..write('active: $active, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -5142,6 +5198,7 @@ typedef $$UnitsTableTableCreateCompanionBuilder = UnitsTableCompanion Function({
   required String name,
   Value<String?> abbreviation,
   Value<bool> allowsDecimals,
+  Value<double> saleStep,
   Value<bool> active,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -5151,6 +5208,7 @@ typedef $$UnitsTableTableUpdateCompanionBuilder = UnitsTableCompanion Function({
   Value<String> name,
   Value<String?> abbreviation,
   Value<bool> allowsDecimals,
+  Value<double> saleStep,
   Value<bool> active,
   Value<DateTime> createdAt,
   Value<int> rowid,
@@ -5205,6 +5263,11 @@ class $$UnitsTableTableFilterComposer
 
   ColumnFilters<bool> get allowsDecimals => $composableBuilder(
     column: $table.allowsDecimals,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<double> get saleStep => $composableBuilder(
+    column: $table.saleStep,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -5273,6 +5336,11 @@ class $$UnitsTableTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<double> get saleStep => $composableBuilder(
+    column: $table.saleStep,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get active => $composableBuilder(
     column: $table.active,
     builder: (column) => ColumnOrderings(column),
@@ -5308,6 +5376,9 @@ class $$UnitsTableTableAnnotationComposer
     column: $table.allowsDecimals,
     builder: (column) => column,
   );
+
+  GeneratedColumn<double> get saleStep =>
+      $composableBuilder(column: $table.saleStep, builder: (column) => column);
 
   GeneratedColumn<bool> get active =>
       $composableBuilder(column: $table.active, builder: (column) => column);
@@ -5373,6 +5444,7 @@ class $$UnitsTableTableTableManager
                 Value<String> name = const Value.absent(),
                 Value<String?> abbreviation = const Value.absent(),
                 Value<bool> allowsDecimals = const Value.absent(),
+                Value<double> saleStep = const Value.absent(),
                 Value<bool> active = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5381,6 +5453,7 @@ class $$UnitsTableTableTableManager
                 name: name,
                 abbreviation: abbreviation,
                 allowsDecimals: allowsDecimals,
+                saleStep: saleStep,
                 active: active,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -5391,6 +5464,7 @@ class $$UnitsTableTableTableManager
                 required String name,
                 Value<String?> abbreviation = const Value.absent(),
                 Value<bool> allowsDecimals = const Value.absent(),
+                Value<double> saleStep = const Value.absent(),
                 Value<bool> active = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -5399,6 +5473,7 @@ class $$UnitsTableTableTableManager
                 name: name,
                 abbreviation: abbreviation,
                 allowsDecimals: allowsDecimals,
+                saleStep: saleStep,
                 active: active,
                 createdAt: createdAt,
                 rowid: rowid,

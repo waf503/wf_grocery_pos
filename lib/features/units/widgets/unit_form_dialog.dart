@@ -1,13 +1,20 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/format/formatters.dart';
 import '../../../models/unit.dart';
 
 class UnitFormResult {
-  UnitFormResult({required this.name, this.abbreviation, required this.allowsDecimals});
+  UnitFormResult({
+    required this.name,
+    this.abbreviation,
+    required this.allowsDecimals,
+    this.saleStep = 1,
+  });
 
   final String name;
   final String? abbreviation;
   final bool allowsDecimals;
+  final double saleStep;
 }
 
 /// [nameTaken] avisa si el nombre ya lo usa OTRA unidad, para no duplicar.
@@ -36,6 +43,7 @@ class _UnitFormDialogState extends State<_UnitFormDialog> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _name;
   late final TextEditingController _abbreviation;
+  late final TextEditingController _saleStep;
   late bool _allowsDecimals;
 
   @override
@@ -45,12 +53,14 @@ class _UnitFormDialogState extends State<_UnitFormDialog> {
     _name = TextEditingController(text: u?.name ?? '');
     _abbreviation = TextEditingController(text: u?.abbreviation ?? '');
     _allowsDecimals = u?.allowsDecimals ?? false;
+    _saleStep = TextEditingController(text: formatQuantity(u?.allowsDecimals == true ? u!.saleStep : 0.5));
   }
 
   @override
   void dispose() {
     _name.dispose();
     _abbreviation.dispose();
+    _saleStep.dispose();
     super.dispose();
   }
 
@@ -62,6 +72,7 @@ class _UnitFormDialogState extends State<_UnitFormDialog> {
         name: _name.text.trim(),
         abbreviation: abbreviation.isEmpty ? null : abbreviation,
         allowsDecimals: _allowsDecimals,
+        saleStep: _allowsDecimals ? double.parse(_saleStep.text.trim().replaceAll(',', '.')) : 1,
       ),
     );
   }
@@ -107,6 +118,19 @@ class _UnitFormDialogState extends State<_UnitFormDialog> {
                 value: _allowsDecimals,
                 onChanged: (value) => setState(() => _allowsDecimals = value),
               ),
+              if (_allowsDecimals)
+                TextFormField(
+                  controller: _saleStep,
+                  decoration: const InputDecoration(
+                    labelText: 'Se vende de ... en ...',
+                    helperText: 'Ej. 0.5 = media libra como mínimo, luego de media en media',
+                  ),
+                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                  validator: (value) {
+                    final step = double.tryParse((value ?? '').trim().replaceAll(',', '.'));
+                    return (step == null || step <= 0 || step > 10) ? 'Ingresa un valor entre 0.01 y 10' : null;
+                  },
+                ),
             ],
           ),
         ),

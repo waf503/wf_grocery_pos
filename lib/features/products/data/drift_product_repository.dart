@@ -73,6 +73,7 @@ class DriftProductRepository implements ProductRepository {
       unitId: unit.id,
       unit: (abbreviation != null && abbreviation.isNotEmpty) ? abbreviation : unit.name,
       allowsDecimals: unit.allowsDecimals,
+      quantityStep: unit.allowsDecimals ? unit.saleStep : 1,
       priceCents: row.priceCents,
       costCents: row.costCents,
       stock: row.stock,

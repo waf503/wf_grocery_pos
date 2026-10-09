@@ -37,11 +37,13 @@ class UnitProvider extends ChangeNotifier {
     required String name,
     String? abbreviation,
     required bool allowsDecimals,
+    double saleStep = 1,
   }) {
     return _repository.add(
       name: name.trim(),
       abbreviation: abbreviation,
       allowsDecimals: allowsDecimals,
+      saleStep: saleStep,
     );
   }
 

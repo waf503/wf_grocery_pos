@@ -32,6 +32,9 @@ class SalesProvider extends ChangeNotifier {
   /// datos (para consultar más allá de [historyDays]), actualizadas solas.
   Stream<List<Sale>> watchRange(DateTime from, DateTime to) => _repository.watchBetween(from, to: to);
 
+  /// Ventas de un turno de caja (incluidas las anuladas), actualizadas solas.
+  Stream<List<Sale>> watchSession(String sessionId) => _repository.watchBySession(sessionId);
+
   /// Solo las ventas vigentes: las anuladas no cuentan en totales ni reportes.
   List<Sale> get completedSales => _sales.where((s) => !s.isVoided).toList();
 

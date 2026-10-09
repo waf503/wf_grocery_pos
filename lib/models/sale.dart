@@ -2,6 +2,12 @@ import '../core/money.dart';
 
 enum PaymentMethod { cash, card, credit }
 
+extension PaymentMethodAvailability on PaymentMethod {
+  /// El pago electrónico aún no está soportado: se muestra deshabilitado al
+  /// cobrar, pero las ventas ya guardadas con ese método se siguen listando.
+  bool get isAvailable => this != PaymentMethod.card;
+}
+
 /// Una venta anulada se conserva en el historial (con su motivo), pero ya
 /// no cuenta en totales ni reportes.
 enum SaleStatus { completed, voided }
@@ -12,7 +18,8 @@ extension PaymentMethodLabel on PaymentMethod {
       case PaymentMethod.cash:
         return 'Efectivo';
       case PaymentMethod.card:
-        return 'Tarjeta';
+        // Categoría de pago electrónico (tarjeta, transferencia, billeteras...).
+        return 'Pago electrónico';
       case PaymentMethod.credit:
         return 'Fiado';
     }

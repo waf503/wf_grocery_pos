@@ -70,6 +70,10 @@ abstract class SaleRepository {
   /// nulo), de la más reciente a la más antigua.
   Stream<List<Sale>> watchBetween(DateTime from, {DateTime? to});
 
+  /// Todas las ventas de un turno de caja (incluidas las anuladas), de la
+  /// más reciente a la más antigua.
+  Stream<List<Sale>> watchBySession(String sessionId);
+
   /// Registra una venta COMPLETA en una sola transacción: encabezado,
   /// renglones, descuento de existencias y (si es en efectivo) el movimiento
   /// de caja. Si algo falla —por ejemplo no hay existencias— no se guarda

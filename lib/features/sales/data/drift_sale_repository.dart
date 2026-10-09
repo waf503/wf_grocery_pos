@@ -15,12 +15,26 @@ class DriftSaleRepository implements SaleRepository {
   @override
   Stream<List<Sale>> watchBetween(DateTime from, {DateTime? to}) {
     final sales = _db.salesTable;
+    return _watchSales(
+      sales.createdAt.isBiggerOrEqualValue(from) &
+          (to == null ? const Constant(true) : sales.createdAt.isSmallerThanValue(to)),
+    );
+  }
+
+  @override
+  Stream<List<Sale>> watchBySession(String sessionId) {
+    return _watchSales(_db.salesTable.sessionId.equals(sessionId));
+  }
+
+  /// Ventas con sus renglones que cumplen [filter], de la más reciente a la
+  /// más antigua.
+  Stream<List<Sale>> _watchSales(Expression<bool> filter) {
+    final sales = _db.salesTable;
     final items = _db.saleItemsTable;
     final query = _db.select(sales).join([
       leftOuterJoin(items, items.saleId.equalsExp(sales.id)),
     ])
-      ..where(sales.createdAt.isBiggerOrEqualValue(from) &
-          (to == null ? const Constant(true) : sales.createdAt.isSmallerThanValue(to)))
+      ..where(filter)
       ..orderBy([OrderingTerm.desc(sales.createdAt), OrderingTerm.desc(sales.number)]);
 
     return query.watch().map((rows) {
@@ -184,7 +198,7 @@ class DriftSaleRepository implements SaleRepository {
         await _db.into(_db.cashMovementsTable).insert(
               CashMovementsTableCompanion.insert(
                 sessionId: cashSessionId!,
-                type: CashMovementType.withdrawal,
+                type: CashMovementType.saleVoid,
                 amountCents: sale.totalCents,
                 note: 'Anulación $folio',
                 createdAt: now,

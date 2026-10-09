@@ -128,7 +128,7 @@ class DriftCustomerRepository implements CustomerRepository {
         await _db.into(_db.cashMovementsTable).insert(
               CashMovementsTableCompanion.insert(
                 sessionId: cashSessionId,
-                type: CashMovementType.deposit,
+                type: CashMovementType.customerPayment,
                 amountCents: amountCents,
                 note: 'Abono de ${customer.name}',
                 createdAt: now,

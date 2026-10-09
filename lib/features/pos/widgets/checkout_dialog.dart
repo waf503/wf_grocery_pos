@@ -54,9 +54,12 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
                       contentPadding: EdgeInsets.zero,
                       dense: true,
                       title: Text(method.label),
-                      subtitle: method == PaymentMethod.credit && widget.customerName == null
-                          ? const Text('Requiere seleccionar un cliente')
-                          : null,
+                      enabled: method.isAvailable,
+                      subtitle: !method.isAvailable
+                          ? const Text('Próximamente')
+                          : method == PaymentMethod.credit && widget.customerName == null
+                              ? const Text('Requiere seleccionar un cliente')
+                              : null,
                       value: method,
                     ),
                 ],

@@ -1,6 +1,9 @@
 import '../core/money.dart';
 
-enum CashMovementType { sale, deposit, withdrawal }
+/// Tipos de movimiento de efectivo. `sale`, `deposit` y `customerPayment`
+/// entran a la caja; `withdrawal` y `saleVoid` (devolución por una venta
+/// anulada) salen. `deposit`/`withdrawal` son los manuales del cajero.
+enum CashMovementType { sale, deposit, withdrawal, customerPayment, saleVoid }
 
 extension CashMovementTypeLabel on CashMovementType {
   String get label {
@@ -11,8 +14,15 @@ extension CashMovementTypeLabel on CashMovementType {
         return 'Ingreso';
       case CashMovementType.withdrawal:
         return 'Retiro';
+      case CashMovementType.customerPayment:
+        return 'Abono de cliente';
+      case CashMovementType.saleVoid:
+        return 'Anulación de venta';
     }
   }
+
+  /// `true` si el movimiento saca efectivo de la caja.
+  bool get isOutflow => this == CashMovementType.withdrawal || this == CashMovementType.saleVoid;
 }
 
 class CashMovement {
@@ -58,7 +68,10 @@ class CashSession {
   int get salesCents => _sum(CashMovementType.sale);
   int get depositsCents => _sum(CashMovementType.deposit);
   int get withdrawalsCents => _sum(CashMovementType.withdrawal);
-  int get expectedCents => openingCents + salesCents + depositsCents - withdrawalsCents;
+  int get customerPaymentsCents => _sum(CashMovementType.customerPayment);
+  int get voidsCents => _sum(CashMovementType.saleVoid);
+  int get expectedCents =>
+      openingCents + salesCents + depositsCents + customerPaymentsCents - withdrawalsCents - voidsCents;
   int? get differenceCents =>
       closingCountedCents == null ? null : closingCountedCents! - expectedCents;
 
@@ -66,6 +79,8 @@ class CashSession {
   double get salesTotal => fromCents(salesCents);
   double get depositsTotal => fromCents(depositsCents);
   double get withdrawalsTotal => fromCents(withdrawalsCents);
+  double get customerPaymentsTotal => fromCents(customerPaymentsCents);
+  double get voidsTotal => fromCents(voidsCents);
   double get expectedAmount => fromCents(expectedCents);
   double? get closingCountedAmount =>
       closingCountedCents == null ? null : fromCents(closingCountedCents!);

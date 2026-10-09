@@ -40,11 +40,15 @@ class CashProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> closeSession(double countedAmount) async {
+  /// Cierra la caja y devuelve el turno cerrado (con su diferencia), o
+  /// `null` si no había caja abierta.
+  Future<CashSession?> closeSession(double countedAmount) async {
     final session = _current;
-    if (session == null) return;
-    await _repository.close(sessionId: session.id, countedCents: toCents(countedAmount));
+    if (session == null) return null;
+    return _repository.close(sessionId: session.id, countedCents: toCents(countedAmount));
   }
+
+  Stream<List<CashSession>> watchClosed() => _repository.watchClosed();
 
   @override
   void dispose() {

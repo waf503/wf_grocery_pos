@@ -56,7 +56,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 11;
+  int get schemaVersion => 12;
 
   /// Migraciones. REGLA: desde la versión 8 hay datos reales de negocio
   /// (ventas y caja), así que cada cambio de esquema debe escribirse como un
@@ -122,6 +122,19 @@ class AppDatabase extends _$AppDatabase {
             // primera edición).
             // (Antes de la v9 la tabla se reconstruye arriba ya con la columna.)
             if (from >= 9) await m.addColumn(productsTable, productsTable.updatedAt);
+          }
+          if (from < 12) {
+            // Los abonos de clientes y las anulaciones se guardaban como
+            // ingreso/retiro genéricos (solo la nota los distinguía): se les
+            // asigna su tipo propio. Los datos no cambian, solo la etiqueta.
+            await customStatement(
+              "UPDATE cash_movements SET type = 'customerPayment' "
+              "WHERE type = 'deposit' AND note LIKE 'Abono de %'",
+            );
+            await customStatement(
+              "UPDATE cash_movements SET type = 'saleVoid' "
+              "WHERE type = 'withdrawal' AND note LIKE 'Anulación V-%'",
+            );
           }
         },
         beforeOpen: (details) async {

@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 
 Future<double?> showOpenCashDialog(BuildContext context) {
-  final controller = TextEditingController(text: '0');
+  // El "0" inicial queda seleccionado: al escribir se reemplaza solo, sin
+  // que el cero se quede a la izquierda del monto.
+  final controller = TextEditingController(text: '0')
+    ..selection = const TextSelection(baseOffset: 0, extentOffset: 1);
   final formKey = GlobalKey<FormState>();
   return showDialog<double>(
     context: context,
@@ -14,7 +17,10 @@ Future<double?> showOpenCashDialog(BuildContext context) {
           autofocus: true,
           decoration: const InputDecoration(labelText: 'Fondo inicial'),
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          validator: (v) => double.tryParse(v ?? '') == null ? 'Ingresa un monto válido' : null,
+          validator: (v) {
+            final value = double.tryParse((v ?? '').trim());
+            return (value == null || value < 0) ? 'Ingresa un monto válido' : null;
+          },
         ),
       ),
       actions: [

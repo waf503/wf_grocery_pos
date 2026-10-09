@@ -54,30 +54,70 @@ class DriftCashRepository implements CashRepository {
     required int amountCents,
     required String note,
   }) async {
-    if (type == CashMovementType.sale) {
-      throw ArgumentError('Las ventas se registran con SaleRepository.registerSale.');
+    if (type != CashMovementType.deposit && type != CashMovementType.withdrawal) {
+      throw ArgumentError('Solo los ingresos y retiros manuales se registran aquí.');
     }
-    await _db.into(_db.cashMovementsTable).insert(
-          CashMovementsTableCompanion.insert(
-            sessionId: sessionId,
-            type: type,
-            amountCents: amountCents,
-            note: note,
-            createdAt: _clock(),
-          ),
-        );
+    await _db.transaction(() async {
+      if (type == CashMovementType.withdrawal) {
+        final session = await _loadSession(sessionId);
+        if (amountCents > session.expectedCents) throw InsufficientCashException(session.expectedCents);
+      }
+      await _db.into(_db.cashMovementsTable).insert(
+            CashMovementsTableCompanion.insert(
+              sessionId: sessionId,
+              type: type,
+              amountCents: amountCents,
+              note: note,
+              createdAt: _clock(),
+            ),
+          );
+    });
   }
 
   @override
-  Future<void> close({required String sessionId, required int countedCents}) async {
-    await (_db.update(_db.cashSessionsTable)
-          ..where((row) => row.id.equals(sessionId) & row.closedAt.isNull()))
-        .write(
-      CashSessionsTableCompanion(
-        closedAt: Value(_clock()),
-        closingCountedCents: Value(countedCents),
-      ),
-    );
+  Future<CashSession> close({required String sessionId, required int countedCents}) {
+    return _db.transaction(() async {
+      final updated = await (_db.update(_db.cashSessionsTable)
+            ..where((row) => row.id.equals(sessionId) & row.closedAt.isNull()))
+          .write(
+        CashSessionsTableCompanion(
+          closedAt: Value(_clock()),
+          closingCountedCents: Value(countedCents),
+        ),
+      );
+      if (updated == 0) throw CashSessionNotOpenException();
+      return _loadSession(sessionId);
+    });
+  }
+
+  @override
+  Stream<List<CashSession>> watchClosed({int limit = 200}) {
+    final query = _db.select(_db.cashSessionsTable)
+      ..where((row) => row.closedAt.isNotNull())
+      ..orderBy([(row) => OrderingTerm.desc(row.closedAt)])
+      ..limit(limit);
+    return query.watch().asyncMap((sessions) async {
+      if (sessions.isEmpty) return <CashSession>[];
+      final ids = [for (final s in sessions) s.id];
+      final movements = await (_db.select(_db.cashMovementsTable)
+            ..where((row) => row.sessionId.isIn(ids))
+            ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+          .get();
+      return [
+        for (final s in sessions)
+          _toModel(s, [for (final m in movements) if (m.sessionId == s.id) m]),
+      ];
+    });
+  }
+
+  Future<CashSession> _loadSession(String sessionId) async {
+    final session = await (_db.select(_db.cashSessionsTable)..where((row) => row.id.equals(sessionId)))
+        .getSingle();
+    final movements = await (_db.select(_db.cashMovementsTable)
+          ..where((row) => row.sessionId.equals(sessionId))
+          ..orderBy([(row) => OrderingTerm.asc(row.createdAt)]))
+        .get();
+    return _toModel(session, movements);
   }
 
   CashSession _toModel(CashSessionsTableData session, List<CashMovementsTableData> movements) {

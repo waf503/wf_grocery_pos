@@ -6,6 +6,10 @@ import 'core/database/app_database.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 import 'features/cash/data/drift_cash_repository.dart';
+import 'features/catalog/data/drift_catalog_repository.dart';
+import 'features/catalog/data/open_facts_client.dart';
+import 'features/catalog/data/product_lookup_service.dart';
+import 'features/catalog/data/vtex_retail_client.dart';
 import 'features/categories/data/drift_category_repository.dart';
 import 'features/customers/data/drift_customer_repository.dart';
 import 'features/products/data/drift_product_repository.dart';
@@ -59,6 +63,15 @@ class GroceryPosApp extends StatelessWidget {
           create: (_) => CashProvider(DriftCashRepository(database)),
         ),
         ChangeNotifierProvider(create: (_) => PosProvider()),
+        Provider<ProductLookupService>(
+          create: (_) => ProductLookupService(
+            DriftCatalogRepository(database),
+            // Primero las bases abiertas; si no conocen el código, el
+            // catálogo de la tienda en línea (que sí tiene productos locales).
+            ChainedLookup([OpenFactsClient(), VtexRetailClient()]),
+          ),
+          dispose: (_, service) => service.dispose(),
+        ),
       ],
       child: MaterialApp.router(
         title: 'Mi Tienda POS',

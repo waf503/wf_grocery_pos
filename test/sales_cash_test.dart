@@ -41,6 +41,9 @@ SaleLine _line(ProductsTableData product, double quantity) => SaleLine(
 /// Devuelve la tabla `products` al formato de antes de la v9: precio y costo
 /// como decimales (REAL) en vez de centavos, para simular una base vieja.
 Future<void> _revertProductsToDecimalPrices(AppDatabase db) async {
+  await db.customStatement('DROP TABLE product_combos');
+  await db.customStatement('DROP TABLE product_images');
+  await db.customStatement('DROP TABLE catalog_items');
   await db.customStatement('''
     CREATE TABLE products_old AS
     SELECT id, name, category_id, unit_id,
@@ -61,6 +64,10 @@ Future<void> _revertToV9Sales(AppDatabase db) async {
   await db.customStatement('ALTER TABLE sales DROP COLUMN status');
   await db.customStatement('ALTER TABLE sales DROP COLUMN voided_at');
   await db.customStatement('ALTER TABLE sales DROP COLUMN void_reason');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN tendered_cents');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN change_cents');
+  await db.customStatement('ALTER TABLE sale_items DROP COLUMN stock_product_id');
+  await db.customStatement('ALTER TABLE sale_items DROP COLUMN stock_quantity');
 }
 
 void main() {

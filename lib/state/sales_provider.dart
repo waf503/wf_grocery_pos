@@ -45,6 +45,7 @@ class SalesProvider extends ChangeNotifier {
     required PaymentMethod paymentMethod,
     String? customerId,
     String? customerName,
+    int? tenderedCents,
   }) {
     return _repository.registerSale(
       sessionId: sessionId,
@@ -52,6 +53,7 @@ class SalesProvider extends ChangeNotifier {
       paymentMethod: paymentMethod,
       customerId: customerId,
       customerName: customerName,
+      tenderedCents: tenderedCents,
     );
   }
 

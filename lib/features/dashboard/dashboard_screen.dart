@@ -39,7 +39,7 @@ class DashboardScreen extends StatelessWidget {
               ),
               StatCard(
                 label: 'Productos',
-                value: '${inventory.products.length}',
+                value: '${inventory.baseProducts.length}',
                 subtitle: 'en catálogo',
                 icon: Icons.inventory_2_outlined,
               ),

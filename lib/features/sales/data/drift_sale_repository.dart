@@ -58,8 +58,12 @@ class DriftSaleRepository implements SaleRepository {
     required PaymentMethod paymentMethod,
     String? customerId,
     String? customerName,
+    int? tenderedCents,
   }) {
     if (lines.isEmpty) throw ArgumentError('Una venta necesita al menos un renglón.');
+    if (tenderedCents != null && paymentMethod != PaymentMethod.cash) {
+      throw ArgumentError('Solo las ventas en efectivo tienen monto recibido.');
+    }
 
     return _db.transaction(() async {
       final session = await (_db.select(_db.cashSessionsTable)
@@ -77,22 +81,48 @@ class DriftSaleRepository implements SaleRepository {
         customerName = customer.name;
       }
 
-      // 1. Validar existencias (sumando por si un producto viene repetido).
-      final requested = <String, double>{};
-      // Los renglones genéricos (sin producto) no tienen existencias.
+      // 1. Validar existencias. Cada renglón consume del producto BASE: una
+      // cajetilla de 20 descuenta 20 unidades del mismo "pool" que la unidad
+      // suelta y que el paquete. Se suma todo lo que se pide de cada pool (un
+      // producto puede venir en varios renglones o presentaciones) antes de
+      // comparar. Los renglones genéricos (sin producto) no tienen existencias.
+      final consumption = <_Consumption?>[];
+      final requestedByPool = <String, double>{};
       for (final line in lines) {
         final id = line.productId;
-        if (id == null) continue;
-        requested[id] = (requested[id] ?? 0) + line.quantity;
-      }
-      for (final line in lines) {
-        final id = line.productId;
-        if (id == null) continue;
+        if (id == null) {
+          consumption.add(null);
+          continue;
+        }
         final product = await (_db.select(_db.productsTable)..where((row) => row.id.equals(id)))
             .getSingleOrNull();
         if (product == null) throw ProductNotFoundException(line.productName);
-        if (product.stock < requested[id]!) {
-          throw InsufficientStockException(line.productName, available: product.stock);
+
+        final poolId = product.baseProductId ?? product.id;
+        final factor = product.unitsPerPack <= 0 ? 1.0 : product.unitsPerPack;
+        final units = line.quantity * factor;
+        consumption.add(_Consumption(poolId, units, factor));
+        requestedByPool[poolId] = (requestedByPool[poolId] ?? 0) + units;
+      }
+
+      final pools = <String, ProductsTableData>{};
+      for (final poolId in requestedByPool.keys) {
+        final pool = await (_db.select(_db.productsTable)..where((row) => row.id.equals(poolId)))
+            .getSingleOrNull();
+        if (pool == null) {
+          final name = lines.firstWhere((l) => l.productId != null).productName;
+          throw ProductNotFoundException(name);
+        }
+        pools[poolId] = pool;
+      }
+      for (var i = 0; i < lines.length; i++) {
+        final use = consumption[i];
+        if (use == null) continue;
+        final pool = pools[use.poolId]!;
+        if (pool.stock + 1e-9 < requestedByPool[use.poolId]!) {
+          // Lo disponible se expresa en la presentación que se quería vender.
+          final available = use.factor == 1 ? pool.stock : (pool.stock / use.factor).floorToDouble();
+          throw InsufficientStockException(lines[i].productName, available: available);
         }
       }
 
@@ -104,6 +134,15 @@ class DriftSaleRepository implements SaleRepository {
       final totalCents = lines.fold<int>(0, (sum, line) => sum + line.subtotalCents);
       final now = _clock();
 
+      // Efectivo: lo recibido (por defecto el total exacto) y el vuelto.
+      int? tendered;
+      int? change;
+      if (paymentMethod == PaymentMethod.cash) {
+        tendered = tenderedCents ?? totalCents;
+        if (tendered < totalCents) throw InsufficientTenderException(totalCents - tendered);
+        change = tendered - totalCents;
+      }
+
       final sale = await _db.into(_db.salesTable).insertReturning(
             SalesTableCompanion.insert(
               number: (lastNumber ?? 0) + 1,
@@ -113,12 +152,16 @@ class DriftSaleRepository implements SaleRepository {
               paymentMethod: paymentMethod,
               totalCents: totalCents,
               createdAt: now,
+              tenderedCents: Value(tendered),
+              changeCents: Value(change),
             ),
           );
 
       // 3. Renglones (con foto de nombre, precio y costo).
       final itemRows = <SaleItemsTableData>[];
-      for (final line in lines) {
+      for (var i = 0; i < lines.length; i++) {
+        final line = lines[i];
+        final use = consumption[i];
         itemRows.add(
           await _db.into(_db.saleItemsTable).insertReturning(
                 SaleItemsTableCompanion.insert(
@@ -129,13 +172,15 @@ class DriftSaleRepository implements SaleRepository {
                   unitPriceCents: line.unitPriceCents,
                   unitCostCents: line.unitCostCents,
                   subtotalCents: line.subtotalCents,
+                  stockProductId: Value(use?.poolId),
+                  stockQuantity: Value(use?.units),
                 ),
               ),
         );
       }
 
       // 4. Descontar existencias de forma atómica (en SQL, no leer-y-escribir).
-      for (final entry in requested.entries) {
+      for (final entry in requestedByPool.entries) {
         await _db.customUpdate(
           'UPDATE products SET stock = stock - ? WHERE id = ?',
           variables: [Variable<double>(entry.value), Variable<String>(entry.key)],
@@ -144,18 +189,33 @@ class DriftSaleRepository implements SaleRepository {
         );
       }
 
-      // 5. Solo el efectivo mueve la caja; tarjeta y fiado no.
+      // 5. Solo el efectivo mueve la caja; tarjeta y fiado no. Entra lo que
+      // entregó el cliente y el vuelto sale como un movimiento propio (neto =
+      // total de la venta).
       if (paymentMethod == PaymentMethod.cash && totalCents > 0) {
+        final folio = 'V-${sale.number.toString().padLeft(6, '0')}';
         await _db.into(_db.cashMovementsTable).insert(
               CashMovementsTableCompanion.insert(
                 sessionId: sessionId,
                 type: CashMovementType.sale,
-                amountCents: totalCents,
-                note: 'Venta V-${sale.number.toString().padLeft(6, '0')}',
+                amountCents: tendered!,
+                note: 'Venta $folio',
                 createdAt: now,
                 saleId: Value(sale.id),
               ),
             );
+        if (change! > 0) {
+          await _db.into(_db.cashMovementsTable).insert(
+                CashMovementsTableCompanion.insert(
+                  sessionId: sessionId,
+                  type: CashMovementType.change,
+                  amountCents: change,
+                  note: 'Vuelto $folio',
+                  createdAt: now,
+                  saleId: Value(sale.id),
+                ),
+              );
+        }
       }
 
       // 6. El fiado carga el saldo del cliente en su estado de cuenta.
@@ -214,10 +274,13 @@ class DriftSaleRepository implements SaleRepository {
       // afecta ninguna fila (no es error).
       final items = await (_db.select(_db.saleItemsTable)..where((row) => row.saleId.equals(saleId))).get();
       for (final item in items) {
-        if (item.productId == null) continue;
+        // Ventas nuevas: el producto base y las unidades que se descontaron.
+        // Ventas anteriores a las presentaciones: el producto y su cantidad.
+        final targetId = item.stockProductId ?? item.productId;
+        if (targetId == null) continue;
         await _db.customUpdate(
           'UPDATE products SET stock = stock + ? WHERE id = ?',
-          variables: [Variable<double>(item.quantity), Variable<String>(item.productId!)],
+          variables: [Variable<double>(item.stockQuantity ?? item.quantity), Variable<String>(targetId)],
           updates: {_db.productsTable},
           updateKind: UpdateKind.update,
         );
@@ -264,6 +327,8 @@ class DriftSaleRepository implements SaleRepository {
       status: sale.status,
       voidedAt: sale.voidedAt,
       voidReason: sale.voidReason,
+      tenderedCents: sale.tenderedCents,
+      changeCents: sale.changeCents,
       items: [
         for (final item in items)
           SaleItem(
@@ -277,4 +342,14 @@ class DriftSaleRepository implements SaleRepository {
       ],
     );
   }
+}
+
+/// Qué existencias consume un renglón de venta: el producto base (pool), las
+/// unidades base que descuenta y cuántas unidades base vale una del renglón.
+class _Consumption {
+  _Consumption(this.poolId, this.units, this.factor);
+
+  final String poolId;
+  final double units;
+  final double factor;
 }

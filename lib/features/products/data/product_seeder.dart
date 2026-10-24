@@ -4,9 +4,13 @@ import '../../../core/database/app_database.dart';
 import '../../../core/money.dart';
 import '../../../core/text/product_tags.dart';
 
-/// Si la tabla `products` está vacía (primer arranque de la app en este
-/// dispositivo), la llena con un catálogo de ejemplo. En corridas
-/// posteriores no hace nada.
+/// Si la tabla `products` está vacía, la llena con un catálogo de ejemplo.
+///
+/// SOLO PARA PRUEBAS Y DESARROLLO: la app ya no lo llama al arrancar (un
+/// inventario real empieza vacío, y re-sembrar cada vez que se borran todos
+/// los productos sería un error). Necesita que existan las categorías y
+/// unidades de `seedCategoriesIfEmpty` / `seedUnitsIfEmpty` con sus nombres
+/// originales.
 ///
 /// [categoryIds] es el mapa nombre → id que devuelve `seedCategoriesIfEmpty`
 /// — las categorías deben sembrarse ANTES que los productos, porque cada

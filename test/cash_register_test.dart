@@ -199,6 +199,16 @@ void main() {
       await insert('deposit', 'Cambio inicial');
       await insert('withdrawal', 'Pago a proveedor');
       await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
+      await seeded.customStatement('DROP TABLE product_images');
+      await seeded.customStatement('DROP TABLE catalog_items');
+      await seeded.customStatement('ALTER TABLE products DROP COLUMN has_image');
+      await seeded.customStatement('ALTER TABLE sales DROP COLUMN tendered_cents');
+      await seeded.customStatement('ALTER TABLE sales DROP COLUMN change_cents');
+      await seeded.customStatement('DROP TABLE product_combos');
+      await seeded.customStatement('ALTER TABLE products DROP COLUMN base_product_id');
+      await seeded.customStatement('ALTER TABLE products DROP COLUMN units_per_pack');
+      await seeded.customStatement('ALTER TABLE sale_items DROP COLUMN stock_product_id');
+      await seeded.customStatement('ALTER TABLE sale_items DROP COLUMN stock_quantity');
       await seeded.customStatement('PRAGMA user_version = 11');
       await seeded.close();
 

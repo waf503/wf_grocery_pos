@@ -20,11 +20,15 @@ class CartPanel extends StatefulWidget {
 }
 
 class _CartPanelState extends State<CartPanel> {
-  static const double _rowHeight = 64;
   static const double _listPadding = 8;
 
   final _scrollController = ScrollController();
   int _seenAddSerial = 0;
+
+  /// Una llave por renglón: como el nombre completo del producto puede ocupar
+  /// una, dos o tres líneas, los renglones NO miden lo mismo y para mostrar el
+  /// último agregado se le pide al propio renglón que se haga visible.
+  final Map<String, GlobalKey> _rowKeys = {};
 
   @override
   void dispose() {
@@ -46,31 +50,30 @@ class _CartPanelState extends State<CartPanel> {
 
   /// Cada vez que se agrega un producto, desplaza la lista lo justo para
   /// que su renglón quede visible (el nuevo al final, o el existente cuya
-  /// cantidad subió).
+  /// cantidad subió). Si ya se ve completo, no se mueve nada.
   void _revealLastAdded(PosProvider pos) {
     if (pos.addSerial == _seenAddSerial) return;
     _seenAddSerial = pos.addSerial;
-    final index = pos.cart.indexWhere(
-      (item) => item.product.id == pos.activeProductId,
-    );
-    if (index < 0) return;
+    final activeId = pos.activeProductId;
+    if (activeId == null) return;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_scrollController.hasClients) return;
-      final position = _scrollController.position;
-      final top = _listPadding + index * _rowHeight;
-      final bottom = top + _rowHeight + _listPadding;
-      double? target;
-      if (top < position.pixels) {
-        target = top - _listPadding;
-      } else if (bottom > position.pixels + position.viewportDimension) {
-        target = bottom - position.viewportDimension;
-      }
-      if (target == null) return;
-      _scrollController.animateTo(
-        target.clamp(0, position.maxScrollExtent),
-        duration: const Duration(milliseconds: 220),
+      final rowContext = _rowKeys[activeId]?.currentContext;
+      if (!mounted || rowContext == null || !_scrollController.hasClients) return;
+      const duration = Duration(milliseconds: 220);
+      // Si está más abajo de lo que se ve, se alinea al final; si quedó más
+      // arriba, al comienzo. Si ya está a la vista, ninguna de las dos mueve nada.
+      Scrollable.ensureVisible(
+        rowContext,
+        duration: duration,
         curve: Curves.easeOut,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
+      );
+      Scrollable.ensureVisible(
+        rowContext,
+        duration: duration,
+        curve: Curves.easeOut,
+        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
       );
     });
   }
@@ -78,6 +81,7 @@ class _CartPanelState extends State<CartPanel> {
   @override
   Widget build(BuildContext context) {
     final pos = context.watch<PosProvider>();
+    _rowKeys.removeWhere((id, _) => !pos.cart.any((item) => item.product.id == id));
     _revealLastAdded(pos);
     final customers = context.watch<CustomerProvider>().customers;
     final categories = context.watch<CategoryProvider>();
@@ -144,7 +148,6 @@ class _CartPanelState extends State<CartPanel> {
                 : ListView.builder(
                     controller: _scrollController,
                     padding: const EdgeInsets.all(_listPadding),
-                    itemExtent: _rowHeight,
                     itemCount: pos.cart.length,
                     itemBuilder: (context, index) {
                       final item = pos.cart[index];
@@ -162,86 +165,15 @@ class _CartPanelState extends State<CartPanel> {
                               scheme.surface,
                             )
                           : (index.isEven ? scheme.surface : scheme.surfaceContainerHighest);
-                      return DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: rowColor,
-                          border: Border(
-                            left: isActive
-                                ? BorderSide(color: categoryColor, width: 6)
-                                : BorderSide.none,
-                            bottom: BorderSide(color: scheme.outlineVariant),
-                          ),
-                        ),
-                        child: ListTile(
-                          dense: true,
-                          title: Text(
-                            item.product.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          subtitle: Text(
-                            item.product.allowsDecimals
-                                ? '${formatCurrency(item.product.price)} / ${item.product.unit}'
-                                : '${formatCurrency(item.product.price)} c/u'
-                                    '${item.product.isGeneric ? ' · genérico' : ''}',
-                          ),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
-                                iconSize: 20,
-                                onPressed: () =>
-                                    pos.decrementQuantity(item.product.id),
-                              ),
-                              item.product.allowsDecimals
-                                  // Por peso: tocar la cantidad permite teclear
-                                  // una exacta (p. ej. 2.5 lb).
-                                  ? Tooltip(
-                                      message: 'Cambiar cantidad',
-                                      child: InkWell(
-                                        borderRadius: BorderRadius.circular(6),
-                                        onTap: () => _editQuantity(context, pos, item),
-                                        child: Padding(
-                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                                          child: Text(
-                                            '${formatQuantity(item.quantity)} ${item.product.unit}',
-                                            style: Theme.of(context).textTheme.titleSmall,
-                                          ),
-                                        ),
-                                      ),
-                                    )
-                                  : Text(
-                                      formatQuantity(item.quantity),
-                                      style: Theme.of(context).textTheme.titleSmall,
-                                    ),
-                              IconButton(
-                                icon: const Icon(Icons.add_circle_outline),
-                                iconSize: 20,
-                                onPressed: () =>
-                                    pos.incrementQuantity(item.product.id),
-                              ),
-                              const SizedBox(width: 4),
-                              SizedBox(
-                                width: 64,
-                                child: Text(
-                                  formatCurrency(item.subtotal),
-                                  textAlign: TextAlign.right,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(fontWeight: FontWeight.w600),
-                                ),
-                              ),
-                              // Quita el renglón completo, sin importar la cantidad.
-                              IconButton(
-                                icon: Icon(Icons.delete_outline, color: scheme.error),
-                                iconSize: 20,
-                                visualDensity: VisualDensity.compact,
-                                tooltip: 'Quitar del carrito',
-                                onPressed: () => pos.removeItem(item.product.id),
-                              ),
-                            ],
-                          ),
-                        ),
+                      return _CartRow(
+                        key: _rowKeys.putIfAbsent(item.product.id, GlobalKey.new),
+                        item: item,
+                        color: rowColor,
+                        stripeColor: isActive ? categoryColor : null,
+                        onDecrement: () => pos.decrementQuantity(item.product.id),
+                        onIncrement: () => pos.incrementQuantity(item.product.id),
+                        onRemove: () => pos.removeItem(item.product.id),
+                        onEditQuantity: () => _editQuantity(context, pos, item),
                       );
                     },
                   ),
@@ -281,6 +213,132 @@ class _CartPanelState extends State<CartPanel> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Un renglón del carrito. Se acomoda en tres filas para que quepa el NOMBRE
+/// COMPLETO del producto (sin cortarlo con "..."):
+///
+///   Nombre del producto, en las líneas que haga falta
+///   $3.80 c/u · combo: ahorra $0.10
+///   [−] 2 [+]                          $7.60  [papelera]
+class _CartRow extends StatelessWidget {
+  const _CartRow({
+    super.key,
+    required this.item,
+    required this.color,
+    required this.stripeColor,
+    required this.onDecrement,
+    required this.onIncrement,
+    required this.onRemove,
+    required this.onEditQuantity,
+  });
+
+  final CartItem item;
+  final Color color;
+
+  /// Franja izquierda del producto activo (color de su categoría).
+  final Color? stripeColor;
+  final VoidCallback onDecrement;
+  final VoidCallback onIncrement;
+  final VoidCallback onRemove;
+  final VoidCallback onEditQuantity;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final product = item.product;
+
+    final priceLine = product.allowsDecimals
+        ? '${formatCurrency(product.price)} / ${product.unit}'
+        : '${formatCurrency(product.price)} c/u'
+            '${product.isGeneric ? ' · genérico' : ''}'
+            '${item.savingsCents > 0 ? ' · combo: ahorra ${formatCurrency(item.savingsCents / 100)}' : ''}';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color,
+        border: Border(
+          left: stripeColor != null ? BorderSide(color: stripeColor!, width: 6) : BorderSide.none,
+          bottom: BorderSide(color: scheme.outlineVariant),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 4, 4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Nombre completo: se parte en las líneas necesarias.
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                product.name,
+                style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: Text(
+                priceLine,
+                style: theme.textTheme.bodySmall?.copyWith(color: scheme.onSurfaceVariant),
+              ),
+            ),
+            const SizedBox(height: 2),
+            Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.remove_circle_outline),
+                  iconSize: 22,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Quitar una',
+                  onPressed: onDecrement,
+                ),
+                product.allowsDecimals
+                    // Por peso: tocar la cantidad permite teclear una exacta
+                    // (p. ej. 2.5 lb).
+                    ? Tooltip(
+                        message: 'Cambiar cantidad',
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(6),
+                          onTap: onEditQuantity,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                            child: Text(
+                              '${formatQuantity(item.quantity)} ${product.unit}',
+                              style: theme.textTheme.titleSmall,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Text(formatQuantity(item.quantity), style: theme.textTheme.titleSmall),
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline),
+                  iconSize: 22,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Agregar una',
+                  onPressed: onIncrement,
+                ),
+                const Spacer(),
+                Text(
+                  formatCurrency(item.subtotal),
+                  style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.bold),
+                ),
+                // Quita el renglón completo, sin importar la cantidad.
+                IconButton(
+                  icon: Icon(Icons.delete_outline, color: scheme.error),
+                  iconSize: 22,
+                  visualDensity: VisualDensity.compact,
+                  tooltip: 'Quitar del carrito',
+                  onPressed: onRemove,
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

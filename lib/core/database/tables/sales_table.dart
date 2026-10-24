@@ -32,6 +32,12 @@ class SalesTable extends Table {
   DateTimeColumn get voidedAt => dateTime().nullable()();
   TextColumn get voidReason => text().nullable()();
 
+  /// Solo en ventas en EFECTIVO: lo que entregó el cliente y el vuelto que se
+  /// le devolvió (`tendered - total`). Nulos en tarjeta, fiado y en las ventas
+  /// anteriores a que se guardara este dato.
+  IntColumn get tenderedCents => integer().nullable()();
+  IntColumn get changeCents => integer().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

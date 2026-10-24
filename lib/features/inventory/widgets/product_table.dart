@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../core/format/formatters.dart';
 import '../../../models/product.dart';
 import '../../../shared/widgets/empty_state.dart';
+import '../../../shared/widgets/product_thumbnail.dart';
 
 const double _checkWidth = 56;
 const double _barcodeWidth = 150;
@@ -12,7 +13,7 @@ const double _dateWidth = 110;
 const double _priceWidth = 120;
 const double _costWidth = 120;
 const double _stockWidth = 150;
-const double _actionsWidth = 110;
+const double _actionsWidth = 190;
 
 /// Tabla plana de Inventario: una fila por producto, con selección múltiple.
 class ProductTable extends StatelessWidget {
@@ -21,6 +22,8 @@ class ProductTable extends StatelessWidget {
     required this.products,
     required this.onEdit,
     required this.onDelete,
+    required this.onAddStock,
+    required this.onAddPresentation,
     required this.selectedIds,
     required this.onSelectionChanged,
   });
@@ -28,6 +31,13 @@ class ProductTable extends StatelessWidget {
   final List<Product> products;
   final ValueChanged<Product> onEdit;
   final ValueChanged<Product> onDelete;
+
+  /// Agregar inventario: desde una cajetilla se esperan cajetillas, desde un
+  /// paquete paquetes y desde la unidad, unidades.
+  final ValueChanged<Product> onAddStock;
+
+  /// Agregar una presentación (solo en productos base).
+  final ValueChanged<Product> onAddPresentation;
   final Set<String> selectedIds;
   final void Function(Set<String> ids) onSelectionChanged;
 
@@ -78,6 +88,8 @@ class ProductTable extends StatelessWidget {
                         onSelectedChanged: (value) => _setSelected([product], value),
                         onEdit: () => onEdit(product),
                         onDelete: () => onDelete(product),
+                        onAddStock: () => onAddStock(product),
+                        onAddPresentation: () => onAddPresentation(product),
                       );
                     },
                   ),
@@ -105,7 +117,7 @@ class _RowShell extends StatelessWidget {
     required this.stock,
     required this.actions,
     this.color,
-    this.height = 60,
+    this.height = 72,
   });
 
   final Widget check;
@@ -185,8 +197,12 @@ class _ProductRow extends StatelessWidget {
     required this.onSelectedChanged,
     required this.onEdit,
     required this.onDelete,
+    required this.onAddStock,
+    required this.onAddPresentation,
   });
 
+  final VoidCallback onAddStock;
+  final VoidCallback onAddPresentation;
   final Product product;
   final bool selected;
   final ValueChanged<bool> onSelectedChanged;
@@ -202,10 +218,33 @@ class _ProductRow extends StatelessWidget {
     return _RowShell(
       color: selected ? scheme.primaryContainer.withValues(alpha: 0.4) : null,
       check: Checkbox(value: selected, onChanged: (v) => onSelectedChanged(v ?? false)),
-      product: Text(
-        product.name,
-        style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-        overflow: TextOverflow.ellipsis,
+      product: Row(
+        children: [
+          ProductThumbnail(product: product, size: 56),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  product.name,
+                  style: textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                // Una presentación se vende por separado pero comparte las
+                // existencias de su producto base.
+                if (product.isPresentation || product.poolFactor > 1)
+                  Text(
+                    '${product.isPresentation ? 'Presentación' : 'Producto base'} · '
+                    '${product.poolFactor > 1 ? 'contiene ${formatQuantity(product.poolFactor)} u' : 'unidad mínima'}',
+                    style: textTheme.bodySmall?.copyWith(color: scheme.primary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
       category: Text(product.category, overflow: TextOverflow.ellipsis),
       barcode: Text(
@@ -224,6 +263,18 @@ class _ProductRow extends StatelessWidget {
       actions: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          IconButton(
+            icon: Icon(Icons.add_box_outlined, color: scheme.primary),
+            tooltip: 'Agregar inventario',
+            onPressed: onAddStock,
+          ),
+          // Las presentaciones se crean desde el producto base.
+          if (!product.isPresentation)
+            IconButton(
+              icon: const Icon(Icons.layers_outlined),
+              tooltip: 'Agregar presentación',
+              onPressed: onAddPresentation,
+            ),
           IconButton(icon: const Icon(Icons.edit_outlined), tooltip: 'Editar', onPressed: onEdit),
           IconButton(
             icon: Icon(Icons.delete_outline, color: scheme.error),
@@ -258,7 +309,9 @@ class _StockPill extends StatelessWidget {
             const SizedBox(width: 4),
           ],
           Text(
-            '${formatQuantity(product.stock)} ${product.unit}',
+            product.isPresentation
+                ? '${formatQuantity(product.stock)} disp.'
+                : '${formatQuantity(product.stock)} ${product.unit}',
             style: TextStyle(color: foreground, fontWeight: FontWeight.w600, fontSize: 13),
           ),
         ],

@@ -13,6 +13,7 @@ class SaleLine {
     required this.quantity,
     required this.unitPriceCents,
     required this.unitCostCents,
+    this.fixedSubtotalCents,
   });
 
   final String? productId;
@@ -21,7 +22,11 @@ class SaleLine {
   final int unitPriceCents;
   final int unitCostCents;
 
-  int get subtotalCents => (quantity * unitPriceCents).round();
+  /// Subtotal ya calculado con los combos del producto (ej. 2 por $0.25). Si
+  /// es nulo, es simplemente cantidad × precio.
+  final int? fixedSubtotalCents;
+
+  int get subtotalCents => fixedSubtotalCents ?? (quantity * unitPriceCents).round();
 
   bool get isGeneric => productId == null;
 }
@@ -71,6 +76,16 @@ class SaleAlreadyVoidedException implements Exception {
   String toString() => 'La venta ya fue anulada.';
 }
 
+/// El cliente entregó menos de lo que cuesta la venta.
+class InsufficientTenderException implements Exception {
+  InsufficientTenderException(this.missingCents);
+
+  final int missingCents;
+
+  @override
+  String toString() => 'El efectivo recibido no alcanza para pagar la venta.';
+}
+
 abstract class SaleRepository {
   /// Ventas desde [from] (incluida) hasta [to] (excluida; sin límite si es
   /// nulo), de la más reciente a la más antigua.
@@ -86,12 +101,18 @@ abstract class SaleRepository {
   /// nada. Las ventas a crédito también cargan el saldo del cliente. Lanza
   /// [InsufficientStockException], [ProductNotFoundException],
   /// [CashSessionClosedException] o [CreditRequiresCustomerException].
+  ///
+  /// En efectivo, [tenderedCents] es lo que ENTREGÓ el cliente (si es nulo se
+  /// toma el total exacto). Entra a la caja completo y el vuelto sale como un
+  /// movimiento aparte, así que el neto es el total. Si es menor al total lanza
+  /// [InsufficientTenderException]; en otras formas de pago no se admite.
   Future<Sale> registerSale({
     required String sessionId,
     required List<SaleLine> lines,
     required PaymentMethod paymentMethod,
     String? customerId,
     String? customerName,
+    int? tenderedCents,
   });
 
   /// Anula una venta en una sola transacción: la marca como anulada con su

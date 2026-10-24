@@ -69,6 +69,10 @@ class _SaleDetailDialogState extends State<_SaleDetailDialog> {
             children: [
               Text(dateTimeFormat.format(sale.date)),
               Text('Pago: ${sale.paymentMethod.label}'),
+              if (sale.tenderedCents != null) ...[
+                Text('Recibido: ${formatCurrency(sale.tendered!)}'),
+                if ((sale.changeCents ?? 0) > 0) Text('Vuelto: ${formatCurrency(sale.change!)}'),
+              ],
               if (sale.customerName != null) Text('Cliente: ${sale.customerName}'),
               const SizedBox(height: 12),
               for (final item in sale.items)

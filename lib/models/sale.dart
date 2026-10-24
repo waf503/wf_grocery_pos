@@ -63,6 +63,8 @@ class Sale {
     this.status = SaleStatus.completed,
     this.voidedAt,
     this.voidReason,
+    this.tenderedCents,
+    this.changeCents,
   });
 
   final String id;
@@ -78,6 +80,14 @@ class Sale {
   final SaleStatus status;
   final DateTime? voidedAt;
   final String? voidReason;
+
+  /// Ventas en efectivo: lo que entregó el cliente y el vuelto devuelto.
+  /// Nulos en otras formas de pago y en ventas antiguas.
+  final int? tenderedCents;
+  final int? changeCents;
+
+  double? get tendered => tenderedCents == null ? null : fromCents(tenderedCents!);
+  double? get change => changeCents == null ? null : fromCents(changeCents!);
 
   bool get isVoided => status == SaleStatus.voided;
 

@@ -237,6 +237,7 @@ class _CurrentSession extends StatelessWidget {
                             CashMovementType.withdrawal => Icons.arrow_upward,
                             CashMovementType.customerPayment => Icons.payments_outlined,
                             CashMovementType.saleVoid => Icons.undo,
+                            CashMovementType.change => Icons.currency_exchange,
                           },
                         ),
                         title: Text(movement.note),

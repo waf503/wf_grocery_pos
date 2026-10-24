@@ -16,6 +16,7 @@ import 'widgets/cart_panel.dart';
 import 'widgets/checkout_dialog.dart';
 import 'widgets/generic_item_dialog.dart';
 import 'widgets/quantity_dialog.dart';
+import 'widgets/sale_review_dialog.dart';
 import 'widgets/product_grid.dart';
 
 class PosScreen extends StatefulWidget {
@@ -121,6 +122,15 @@ class _PosScreenState extends State<PosScreen> {
       if (item.product.id == product.id) inCart = item.quantity;
     }
 
+    // Las existencias son del producto BASE y se comparten entre sus
+    // presentaciones (unidad, cajetilla, paquete): se descuenta lo que ya hay
+    // en el carrito de cualquiera de ellas y se ve cuántas de ESTA caben aún.
+    final inventory = context.read<InventoryProvider>();
+    final remainingUnits = inventory.poolStock(product) - pos.poolUnitsInCart(product.poolId);
+    final canAddMore = product.poolFactor == 1
+        ? remainingUnits
+        : (remainingUnits / product.poolFactor).floorToDouble();
+
     // Los productos por peso (libras, kilos...) piden la cantidad; los de
     // pieza suman 1 con cada clic o escaneo.
     var quantity = 1.0;
@@ -128,7 +138,7 @@ class _PosScreenState extends State<PosScreen> {
       final entered = await showQuantityDialog(
         context,
         product: product,
-        available: product.stock - inCart,
+        available: inCart + canAddMore,
       );
       if (!mounted) return;
       if (entered == null) {
@@ -138,12 +148,14 @@ class _PosScreenState extends State<PosScreen> {
       quantity = entered;
     }
 
-    if (inCart + quantity > product.stock + 1e-9) {
+    if (quantity > canAddMore + 1e-9) {
       FeedbackAlert.show(
         context,
         type: FeedbackType.warning,
         title: 'Existencias insuficientes',
-        message: 'Solo hay ${formatQuantity(product.stock)} ${product.unit} de ${product.name}',
+        message: canAddMore <= 0
+            ? 'Ya no quedan ${product.name} (todo está en el carrito)'
+            : 'Solo se pueden agregar ${formatQuantity(canAddMore)} más de ${product.name}',
       );
       _scanFocus.requestFocus();
       return;
@@ -182,19 +194,47 @@ class _PosScreenState extends State<PosScreen> {
     final pos = context.read<PosProvider>();
     final customers = context.read<CustomerProvider>();
     final customer = customers.byId(pos.selectedCustomerId);
-    final method = await showPaymentMethodDialog(context, total: pos.total, customerName: customer?.name);
-    if (method == null || !mounted) return;
-
-    // El fiado exige un cliente registrado (no "Público general").
-    if (method == PaymentMethod.credit && customer == null) {
-      FeedbackAlert.show(
+    // Cobro → REVISIÓN → registro. Nada se guarda hasta que el vendedor
+    // confirma el ticket; desde la revisión puede volver a corregir el pago
+    // (se reabre con lo que ya había escrito) o cancelar (el carrito queda).
+    PaymentChoice? chosen;
+    while (true) {
+      chosen = await showPaymentMethodDialog(
         context,
-        type: FeedbackType.warning,
-        title: 'Selecciona un cliente',
-        message: 'Para vender a crédito elige un cliente en la venta',
+        total: pos.total,
+        customerName: customer?.name,
+        initial: chosen,
       );
-      return;
+      if (chosen == null || !mounted) return;
+
+      // El fiado exige un cliente registrado (no "Público general").
+      if (chosen.method == PaymentMethod.credit && customer == null) {
+        FeedbackAlert.show(
+          context,
+          type: FeedbackType.warning,
+          title: 'Selecciona un cliente',
+          message: 'Para vender a crédito elige un cliente en la venta',
+        );
+        return;
+      }
+
+      final decision = await showSaleReviewDialog(
+        context,
+        items: pos.cart,
+        totalCents: pos.totalCents,
+        payment: chosen,
+        customerName: customer?.name,
+      );
+      if (!mounted) return;
+      if (decision == SaleReviewDecision.confirm) break;
+      if (decision == SaleReviewDecision.cancel) {
+        _scanFocus.requestFocus();
+        return;
+      }
+      // back: se vuelve a abrir el cobro con lo que había escrito.
     }
+    final payment = chosen;
+    final method = payment.method;
 
     final lines = [
       for (final item in pos.cart)
@@ -204,6 +244,8 @@ class _PosScreenState extends State<PosScreen> {
           quantity: item.quantity,
           unitPriceCents: item.product.priceCents,
           unitCostCents: item.product.costCents,
+          // Con los combos aplicados (ej. 2 por $0.25), igual que el carrito.
+          fixedSubtotalCents: item.subtotalCents,
         ),
     ];
 
@@ -217,7 +259,17 @@ class _PosScreenState extends State<PosScreen> {
             paymentMethod: method,
             customerId: customer?.id,
             customerName: customer?.name,
+            tenderedCents: payment.tenderedCents,
           );
+    } on InsufficientTenderException catch (e) {
+      if (!mounted) return;
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.error,
+        title: 'El efectivo no alcanza',
+        message: 'Faltan ${formatCurrency(e.missingCents / 100)}',
+      );
+      return;
     } on InsufficientStockException catch (e) {
       if (!mounted) return;
       FeedbackAlert.show(

@@ -7,13 +7,17 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../models/cash_session.dart';
 import '../../models/customer.dart';
+import '../text/product_tags.dart';
 import '../../models/sale.dart';
 import 'id_generator.dart';
 import 'tables/cash_movements_table.dart';
 import 'tables/cash_sessions_table.dart';
+import 'tables/catalog_items_table.dart';
 import 'tables/categories_table.dart';
 import 'tables/customer_movements_table.dart';
 import 'tables/customers_table.dart';
+import 'tables/product_combos_table.dart';
+import 'tables/product_images_table.dart';
 import 'tables/products_table.dart';
 import 'tables/sale_items_table.dart';
 import 'tables/sales_table.dart';
@@ -41,6 +45,9 @@ part 'app_database.g.dart';
     CashMovementsTable,
     CustomersTable,
     CustomerMovementsTable,
+    ProductImagesTable,
+    CatalogItemsTable,
+    ProductCombosTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -56,7 +63,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 17;
 
   /// Migraciones. REGLA: desde la versión 8 hay datos reales de negocio
   /// (ventas y caja), así que cada cambio de esquema debe escribirse como un
@@ -94,7 +101,14 @@ class AppDatabase extends _$AppDatabase {
             await m.alterTable(
               TableMigration(
                 productsTable,
-                newColumns: [productsTable.priceCents, productsTable.costCents, productsTable.updatedAt],
+                newColumns: [
+                  productsTable.priceCents,
+                  productsTable.costCents,
+                  productsTable.updatedAt,
+                  productsTable.hasImage,
+                  productsTable.baseProductId,
+                  productsTable.unitsPerPack,
+                ],
                 columnTransformer: {
                   productsTable.priceCents:
                       const CustomExpression<int>('CAST(ROUND(price * 100) AS INTEGER)'),
@@ -141,6 +155,56 @@ class AppDatabase extends _$AppDatabase {
             // decimales pasan a venderse de media en media.
             await m.addColumn(unitsTable, unitsTable.saleStep);
             await customStatement('UPDATE units SET sale_step = 0.5 WHERE allows_decimals = 1');
+          }
+          if (from < 14) {
+            // Miniaturas de producto y catálogo de consulta (datos buscados
+            // por código de barras). Antes de la v9 la tabla de productos se
+            // reconstruye arriba ya con la columna `has_image`.
+            await m.createTable(productImagesTable);
+            await m.createTable(catalogItemsTable);
+            await m.create(idxCatalogItemsBarcode);
+            if (from >= 9) await m.addColumn(productsTable, productsTable.hasImage);
+          }
+          if (from < 15) {
+            // Los tags son solo texto: se quitan los guardados con números
+            // ("355ml", "2l") o letras sueltas. Solo cambia `products.tags`.
+            final rows = await customSelect('SELECT id, tags FROM products').get();
+            for (final row in rows) {
+              final old = row.read<String>('tags');
+              final clean = tagWords(old).toSet().join(' ');
+              if (clean == old) continue;
+              await customUpdate(
+                'UPDATE products SET tags = ? WHERE id = ?',
+                variables: [Variable<String>(clean), Variable<String>(row.read<String>('id'))],
+                updates: {productsTable},
+                updateKind: UpdateKind.update,
+              );
+            }
+          }
+          if (from < 16) {
+            // Con cuánto pagó el cliente y el vuelto (ventas en efectivo).
+            // Desde la v7 la tabla `sales` se acaba de crear arriba, ya con
+            // estas columnas.
+            if (from >= 8) {
+              await m.addColumn(salesTable, salesTable.tenderedCents);
+              await m.addColumn(salesTable, salesTable.changeCents);
+            }
+          }
+          if (from < 17) {
+            // Presentaciones (cajetilla, paquete...) que comparten existencias
+            // y combos por cantidad. Antes de la v9 la tabla de productos se
+            // reconstruye arriba ya con las columnas nuevas; y desde la v7 los
+            // renglones de venta se crean con las suyas.
+            await m.createTable(productCombosTable);
+            await m.create(idxProductCombosProductId);
+            if (from >= 9) {
+              await m.addColumn(productsTable, productsTable.baseProductId);
+              await m.addColumn(productsTable, productsTable.unitsPerPack);
+            }
+            if (from >= 8) {
+              await m.addColumn(saleItemsTable, saleItemsTable.stockProductId);
+              await m.addColumn(saleItemsTable, saleItemsTable.stockQuantity);
+            }
           }
         },
         beforeOpen: (details) async {

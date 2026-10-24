@@ -22,6 +22,14 @@ class SaleItemsTable extends Table {
   IntColumn get unitCostCents => integer()();
   IntColumn get subtotalCents => integer()();
 
+  /// Qué producto REALMENTE descontó existencias y cuánto (en su unidad): al
+  /// vender una cajetilla, `stockProductId` es el producto base y
+  /// `stockQuantity` son las unidades (20). Así, anular la venta devuelve lo
+  /// correcto aunque la presentación cambie o se borre. Nulos en ventas
+  /// anteriores a las presentaciones (ahí valen `productId` y `quantity`).
+  TextColumn get stockProductId => text().nullable()();
+  RealColumn get stockQuantity => real().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

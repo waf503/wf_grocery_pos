@@ -17,7 +17,10 @@ class SessionBreakdown extends StatelessWidget {
     return Column(
       children: [
         _Row('Fondo inicial', session.openingAmount),
-        _Row('Ventas en efectivo', session.salesTotal),
+        // Las ventas en efectivo suman lo que ENTREGÓ el cliente; el vuelto
+        // aparece aparte como salida. Sin vueltos es simplemente lo vendido.
+        _Row(session.changeCents > 0 ? 'Efectivo recibido en ventas' : 'Ventas en efectivo', session.salesTotal),
+        if (session.changeCents > 0) _Row('Vueltos entregados', -session.changeTotal),
         if (session.depositsCents > 0) _Row('Ingresos', session.depositsTotal),
         if (session.customerPaymentsCents > 0) _Row('Abonos de clientes', session.customerPaymentsTotal),
         if (session.withdrawalsCents > 0) _Row('Retiros', -session.withdrawalsTotal),

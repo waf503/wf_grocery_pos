@@ -31,6 +31,16 @@ class PosProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Unidades del producto base (pool) que ya hay en el carrito, sumando todas
+  /// sus presentaciones: 2 cajetillas de 20 y 3 sueltas son 43 unidades.
+  double poolUnitsInCart(String poolId) {
+    var units = 0.0;
+    for (final item in _cart) {
+      if (item.product.poolId == poolId) units += item.quantity * item.product.poolFactor;
+    }
+    return units;
+  }
+
   /// Cuánto suman el + / − y un clic: 1 para piezas, o el incremento de la
   /// unidad para productos por peso (0.5 = media libra).
   double _stepOf(Product product) => product.allowsDecimals ? product.quantityStep : 1;

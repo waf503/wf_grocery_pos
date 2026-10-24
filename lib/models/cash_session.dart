@@ -1,9 +1,10 @@
 import '../core/money.dart';
 
-/// Tipos de movimiento de efectivo. `sale`, `deposit` y `customerPayment`
-/// entran a la caja; `withdrawal` y `saleVoid` (devolución por una venta
-/// anulada) salen. `deposit`/`withdrawal` son los manuales del cajero.
-enum CashMovementType { sale, deposit, withdrawal, customerPayment, saleVoid }
+/// Tipos de movimiento de efectivo. `sale` (lo que ENTREGÓ el cliente),
+/// `deposit` y `customerPayment` entran a la caja; `withdrawal`, `saleVoid`
+/// (devolución por una venta anulada) y `change` (el vuelto de una venta)
+/// salen. `deposit`/`withdrawal` son los manuales del cajero.
+enum CashMovementType { sale, deposit, withdrawal, customerPayment, saleVoid, change }
 
 extension CashMovementTypeLabel on CashMovementType {
   String get label {
@@ -18,11 +19,16 @@ extension CashMovementTypeLabel on CashMovementType {
         return 'Abono de cliente';
       case CashMovementType.saleVoid:
         return 'Anulación de venta';
+      case CashMovementType.change:
+        return 'Vuelto';
     }
   }
 
   /// `true` si el movimiento saca efectivo de la caja.
-  bool get isOutflow => this == CashMovementType.withdrawal || this == CashMovementType.saleVoid;
+  bool get isOutflow =>
+      this == CashMovementType.withdrawal ||
+      this == CashMovementType.saleVoid ||
+      this == CashMovementType.change;
 }
 
 class CashMovement {
@@ -70,8 +76,18 @@ class CashSession {
   int get withdrawalsCents => _sum(CashMovementType.withdrawal);
   int get customerPaymentsCents => _sum(CashMovementType.customerPayment);
   int get voidsCents => _sum(CashMovementType.saleVoid);
+
+  /// Vueltos entregados a clientes. Las ventas en efectivo suman lo que el
+  /// cliente ENTREGÓ y el vuelto resta, así que el neto es el total vendido.
+  int get changeCents => _sum(CashMovementType.change);
   int get expectedCents =>
-      openingCents + salesCents + depositsCents + customerPaymentsCents - withdrawalsCents - voidsCents;
+      openingCents +
+      salesCents +
+      depositsCents +
+      customerPaymentsCents -
+      withdrawalsCents -
+      voidsCents -
+      changeCents;
   int? get differenceCents =>
       closingCountedCents == null ? null : closingCountedCents! - expectedCents;
 
@@ -81,6 +97,7 @@ class CashSession {
   double get withdrawalsTotal => fromCents(withdrawalsCents);
   double get customerPaymentsTotal => fromCents(customerPaymentsCents);
   double get voidsTotal => fromCents(voidsCents);
+  double get changeTotal => fromCents(changeCents);
   double get expectedAmount => fromCents(expectedCents);
   double? get closingCountedAmount =>
       closingCountedCents == null ? null : fromCents(closingCountedCents!);

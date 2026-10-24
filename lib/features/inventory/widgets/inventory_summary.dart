@@ -24,7 +24,7 @@ class InventorySummary extends StatelessWidget {
         Expanded(
           child: _MiniStat(
             icon: Icons.inventory_2_outlined,
-            label: 'Presentaciones',
+            label: 'Productos',
             value: '$totalCount',
             color: scheme.primary,
           ),

@@ -1,12 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../core/format/formatters.dart';
 import '../../models/product.dart';
+import '../../shared/widgets/feedback_alert.dart';
 import '../../state/category_provider.dart';
 import '../../state/inventory_provider.dart';
 import '../../state/unit_provider.dart';
 import '../../shared/widgets/section_header.dart';
+import '../catalog/catalog_item.dart';
+import '../catalog/data/product_lookup_service.dart';
+import 'widgets/add_stock_dialog.dart';
 import 'widgets/inventory_summary.dart';
+import 'widgets/lookup_progress_dialog.dart';
 import 'widgets/product_form_dialog.dart';
 import 'widgets/product_table.dart';
 
@@ -65,15 +71,35 @@ class _InventoryScreenState extends State<InventoryScreen> {
     if (found != null) {
       await _editProduct(inventory, categories, found);
     } else {
-      await _addProduct(inventory, categories, barcode: text);
+      await _addProduct(inventory, categories, barcode: text, suggested: await _lookupBarcode(text));
     }
     if (mounted) _scanFocus.requestFocus();
+  }
+
+  /// Busca información del código escaneado (memoria local e internet) para
+  /// precargar el formulario. Nunca bloquea el alta: sin internet, sin
+  /// resultado o si el usuario pulsa "Omitir", devuelve `null`.
+  Future<CatalogItem?> _lookupBarcode(String code) async {
+    if (!ProductLookupService.isLookupable(code)) return null;
+    final service = context.read<ProductLookupService>();
+    final result = await runLookupWithDialog(context, service.lookup(code));
+    if (!mounted || result == null) return null;
+    if (result.item == null) {
+      FeedbackAlert.show(
+        context,
+        type: FeedbackType.warning,
+        title: result.offline ? 'Sin conexión a internet' : 'Sin información de este código',
+        message: 'Registra el producto manualmente',
+      );
+    }
+    return result.item;
   }
 
   Future<void> _addProduct(
     InventoryProvider inventory,
     CategoryProvider categories, {
     String? barcode,
+    CatalogItem? suggested,
   }) async {
     final result = await showProductFormDialog(
       context,
@@ -83,9 +109,10 @@ class _InventoryScreenState extends State<InventoryScreen> {
       generateBarcode: inventory.generateInternalBarcode,
       isBarcodeTaken: inventory.isBarcodeTaken,
       initialBarcode: barcode,
+      suggested: suggested,
     );
     if (result == null) return;
-    await inventory.addProduct(
+    final id = await inventory.addProduct(
       name: result.name,
       categoryId: result.categoryId,
       unitId: result.unitId,
@@ -95,14 +122,55 @@ class _InventoryScreenState extends State<InventoryScreen> {
       minStock: result.minStock,
       barcode: result.barcode,
       extraTags: result.extraTags,
+      image: result.image,
+    );
+    if (result.combos.isNotEmpty) await inventory.setCombos(id, result.combos);
+    if (result.presentations.isNotEmpty || result.rootUnitsPerPack != 1) {
+      await inventory.savePresentations(
+        id,
+        result.presentations,
+        baseUnitsPerPack: result.rootUnitsPerPack,
+        stockScale: result.stockScale,
+      );
+    }
+  }
+
+  /// Agregar inventario desde una fila: la presentación de esa fila queda
+  /// elegida (cajetilla → cajetillas, paquete → paquetes, unidad → unidades).
+  Future<void> _addStock(InventoryProvider inventory, Product product) async {
+    final base = product.isPresentation ? inventory.byId(product.baseProductId!) : product;
+    if (base == null) return;
+    final entry = await showAddStockDialog(
+      context,
+      product: product,
+      base: base,
+      presentations: inventory.presentationsOf(base.id),
+    );
+    if (entry == null || !mounted) return;
+
+    final units = await inventory.addStock(entry.target, entry.quantity, costCents: entry.costCents);
+    if (!mounted) return;
+    FeedbackAlert.show(
+      context,
+      type: FeedbackType.success,
+      title: 'Inventario agregado',
+      message: '${base.name}: +${formatQuantity(units)} ${base.unit} '
+          '(ahora ${formatQuantity(base.stock + units)})'
+          '${entry.costCents != null ? ' · costo actualizado' : ''}',
     );
   }
 
   Future<void> _editProduct(
     InventoryProvider inventory,
     CategoryProvider categories,
-    Product product,
-  ) async {
+    Product product, {
+    bool startWithNewPresentation = false,
+  }) async {
+    // Una presentación se edita desde su producto base (ahí están sus
+    // existencias y sus hermanas), incluso si se llegó escaneando su código.
+    if (product.isPresentation) product = inventory.byId(product.baseProductId!) ?? product;
+    final existingImage = await inventory.imageFor(product);
+    if (!mounted) return;
     final result = await showProductFormDialog(
       context,
       categories: categories.flatIndented,
@@ -111,6 +179,9 @@ class _InventoryScreenState extends State<InventoryScreen> {
       generateBarcode: inventory.generateInternalBarcode,
       isBarcodeTaken: inventory.isBarcodeTaken,
       existing: product,
+      existingImage: existingImage,
+      existingPresentations: inventory.presentationsOf(product.id),
+      startWithNewPresentation: startWithNewPresentation,
     );
     if (result == null) return;
     await inventory.updateProduct(
@@ -124,6 +195,16 @@ class _InventoryScreenState extends State<InventoryScreen> {
       minStock: result.minStock,
       barcode: result.barcode,
       extraTags: result.extraTags,
+      image: result.imageChanged ? result.image : null,
+      removeImage: result.imageChanged && result.image == null,
+    );
+    // Siempre se reemplazan: así también se borran las que el usuario quitó.
+    await inventory.setCombos(product.id, result.combos);
+    await inventory.savePresentations(
+      product.id,
+      result.presentations,
+      baseUnitsPerPack: result.rootUnitsPerPack,
+      stockScale: result.stockScale,
     );
   }
 
@@ -132,7 +213,12 @@ class _InventoryScreenState extends State<InventoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar producto'),
-        content: Text('¿Seguro que deseas eliminar "${product.name}"?'),
+        content: Text(
+          inventory.presentationsOf(product.id).isEmpty
+              ? '¿Seguro que deseas eliminar "${product.name}"?'
+              : '¿Seguro que deseas eliminar "${product.name}"? '
+                  'También se eliminarán sus ${inventory.presentationsOf(product.id).length} presentaciones.',
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancelar')),
           FilledButton(
@@ -181,10 +267,13 @@ class _InventoryScreenState extends State<InventoryScreen> {
         .toList();
     final existingIds = inventory.products.map((p) => p.id).toSet();
     final selectedIds = _selectedIds.intersection(existingIds);
-    final inventoryValue = inventory.products.fold<double>(0, (sum, p) => sum + p.cost * p.stock);
+    // Las presentaciones comparten las existencias de su producto base: solo
+    // se cuenta el base para no sumar dos veces lo mismo.
+    // Valor del pool completo (incluye las unidades sueltas que no forman un empaque).
+    final inventoryValue = inventory.baseProducts.fold<double>(0, (sum, p) => sum + p.poolUnits * p.cost / p.poolFactor);
 
     final summary = InventorySummary(
-      totalCount: inventory.products.length,
+      totalCount: inventory.baseProducts.length,
       lowStockCount: inventory.lowStockProducts.length,
       inventoryValue: inventoryValue,
     );
@@ -206,7 +295,7 @@ class _InventoryScreenState extends State<InventoryScreen> {
             ],
           ),
           const SizedBox(height: 20),
-          SizedBox(height: 100, child: summary),
+          SizedBox(height: 112, child: summary),
           const SizedBox(height: 20),
           Expanded(
             child: Card(
@@ -303,8 +392,21 @@ class _InventoryScreenState extends State<InventoryScreen> {
                   Expanded(
                     child: ProductTable(
                       products: products,
-                      onEdit: (p) => _editProduct(inventory, categoryProvider, p),
+                      // Editar una presentación abre el producto base (ahí se
+                      // cambian sus presentaciones y las existencias).
+                      onEdit: (p) => _editProduct(
+                        inventory,
+                        categoryProvider,
+                        p.isPresentation ? (inventory.byId(p.baseProductId!) ?? p) : p,
+                      ),
                       onDelete: (p) => _deleteProduct(inventory, p),
+                      onAddStock: (p) => _addStock(inventory, p),
+                      onAddPresentation: (p) => _editProduct(
+                        inventory,
+                        categoryProvider,
+                        p,
+                        startWithNewPresentation: true,
+                      ),
                       selectedIds: selectedIds,
                       onSelectionChanged: (ids) => setState(() => _selectedIds = ids),
                     ),

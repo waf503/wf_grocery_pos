@@ -28,6 +28,7 @@ class CustomerMovement {
     required this.note,
     required this.date,
     this.saleId,
+    this.receivedBy,
   });
 
   final String id;
@@ -36,6 +37,9 @@ class CustomerMovement {
   final String note;
   final DateTime date;
   final String? saleId;
+
+  /// Quién recibió el abono (solo en abonos).
+  final String? receivedBy;
 
   double get amount => fromCents(amountCents);
 }

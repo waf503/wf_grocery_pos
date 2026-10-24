@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -5,13 +7,17 @@ import '../../core/format/formatters.dart';
 import '../../models/product.dart';
 import '../../models/sale.dart';
 import '../../shared/widgets/feedback_alert.dart';
+import '../../state/auth_provider.dart';
 import '../../state/cash_provider.dart';
 import '../../state/category_provider.dart';
 import '../../state/customer_provider.dart';
 import '../../state/inventory_provider.dart';
 import '../../state/pos_provider.dart';
 import '../../state/sales_provider.dart';
+import '../../state/settings_provider.dart';
 import '../sales/data/sale_repository.dart';
+import '../printing/print_service.dart';
+import '../printing/ticket_preview_dialog.dart';
 import 'widgets/cart_panel.dart';
 import 'widgets/checkout_dialog.dart';
 import 'widgets/generic_item_dialog.dart';
@@ -197,15 +203,20 @@ class _PosScreenState extends State<PosScreen> {
     // Cobro → REVISIÓN → registro. Nada se guarda hasta que el vendedor
     // confirma el ticket; desde la revisión puede volver a corregir el pago
     // (se reabre con lo que ya había escrito) o cancelar (el carrito queda).
+    // Las ventas pequeñas (hasta el tope que fija el administrador) pueden
+    // registrarse sin revisar; sin la configuración, siempre se revisa.
+    final skipReviewLimit = context.read<SettingsProvider?>()?.skipReviewLimitCents;
     PaymentChoice? chosen;
     while (true) {
-      chosen = await showPaymentMethodDialog(
+      final outcome = await showPaymentDialog(
         context,
         total: pos.total,
         customerName: customer?.name,
         initial: chosen,
+        skipReviewUpToCents: skipReviewLimit,
       );
-      if (chosen == null || !mounted) return;
+      if (outcome == null || !mounted) return;
+      chosen = outcome.choice;
 
       // El fiado exige un cliente registrado (no "Público general").
       if (chosen.method == PaymentMethod.credit && customer == null) {
@@ -217,6 +228,8 @@ class _PosScreenState extends State<PosScreen> {
         );
         return;
       }
+
+      if (outcome.skipReview) break;
 
       final decision = await showSaleReviewDialog(
         context,
@@ -260,6 +273,7 @@ class _PosScreenState extends State<PosScreen> {
             customerId: customer?.id,
             customerName: customer?.name,
             tenderedCents: payment.tenderedCents,
+            cashierName: context.read<AuthProvider?>()?.currentUser?.name,
           );
     } on InsufficientTenderException catch (e) {
       if (!mounted) return;
@@ -300,6 +314,12 @@ class _PosScreenState extends State<PosScreen> {
 
     pos.clear();
     if (!mounted) return;
+    // Ticket impreso automáticamente (si hay impresora). Un problema de la
+    // impresora no afecta la venta: ya está guardada; solo se avisa.
+    final printer = context.read<PrintService?>();
+    if (printer != null && printer.autoPrint) {
+      unawaited(printSaleWithFeedback(context, printer, sale));
+    }
     await showReceiptDialog(context, sale);
     if (mounted) _scanFocus.requestFocus();
   }

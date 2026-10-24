@@ -65,6 +65,8 @@ class Sale {
     this.voidReason,
     this.tenderedCents,
     this.changeCents,
+    this.cashierName,
+    this.voidedBy,
   });
 
   final String id;
@@ -85,6 +87,10 @@ class Sale {
   /// Nulos en otras formas de pago y en ventas antiguas.
   final int? tenderedCents;
   final int? changeCents;
+
+  /// Quién cobró y quién anuló (nulos en ventas anteriores a los usuarios).
+  final String? cashierName;
+  final String? voidedBy;
 
   double? get tendered => tenderedCents == null ? null : fromCents(tenderedCents!);
   double? get change => changeCents == null ? null : fromCents(changeCents!);

@@ -16,6 +16,11 @@ class CashSessionsTable extends Table {
   IntColumn get openingCents => integer().check(openingCents.isBiggerOrEqualValue(0))();
   IntColumn get closingCountedCents => integer().nullable()();
 
+  /// Foto del nombre de quien abrió y de quien cerró el turno (nulos en turnos
+  /// anteriores a los usuarios).
+  TextColumn get openedBy => text().nullable()();
+  TextColumn get closedBy => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

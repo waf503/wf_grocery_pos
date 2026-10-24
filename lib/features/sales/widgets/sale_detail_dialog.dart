@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/format/formatters.dart';
+import 'package:provider/provider.dart';
+
 import '../../../models/sale.dart';
+import '../../printing/print_service.dart';
+import '../../printing/ticket_preview_dialog.dart';
 
 /// Detalle de una venta. Devuelve el motivo escrito si el usuario eligió
 /// anularla; `null` si solo la consultó o canceló.
@@ -74,6 +78,7 @@ class _SaleDetailDialogState extends State<_SaleDetailDialog> {
                 if ((sale.changeCents ?? 0) > 0) Text('Vuelto: ${formatCurrency(sale.change!)}'),
               ],
               if (sale.customerName != null) Text('Cliente: ${sale.customerName}'),
+              if (sale.cashierName != null) Text('Cobró: ${sale.cashierName}'),
               const SizedBox(height: 12),
               for (final item in sale.items)
                 Padding(
@@ -96,7 +101,7 @@ class _SaleDetailDialogState extends State<_SaleDetailDialog> {
               if (sale.isVoided) ...[
                 const SizedBox(height: 12),
                 Text(
-                  'Anulada el ${dateTimeFormat.format(sale.voidedAt!)}\nMotivo: ${sale.voidReason ?? '-'}',
+                  'Anulada el ${dateTimeFormat.format(sale.voidedAt!)}${sale.voidedBy != null ? ' por ${sale.voidedBy}' : ''}\nMotivo: ${sale.voidReason ?? '-'}',
                   style: TextStyle(color: scheme.error),
                 ),
               ],
@@ -123,6 +128,12 @@ class _SaleDetailDialogState extends State<_SaleDetailDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(_confirmingVoid ? 'Cancelar' : 'Cerrar'),
         ),
+        if (!_confirmingVoid && context.read<PrintService?>() != null)
+          OutlinedButton.icon(
+            onPressed: () => showSaleTicket(context, sale, reprint: true),
+            icon: const Icon(Icons.print_outlined),
+            label: const Text('Ticket'),
+          ),
         if (!sale.isVoided && !_confirmingVoid)
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(foregroundColor: scheme.error),

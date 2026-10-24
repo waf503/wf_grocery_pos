@@ -5,6 +5,7 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../models/app_user.dart';
 import '../../models/cash_session.dart';
 import '../../models/customer.dart';
 import '../text/product_tags.dart';
@@ -21,7 +22,9 @@ import 'tables/product_images_table.dart';
 import 'tables/products_table.dart';
 import 'tables/sale_items_table.dart';
 import 'tables/sales_table.dart';
+import 'tables/settings_table.dart';
 import 'tables/units_table.dart';
+import 'tables/users_table.dart';
 
 part 'app_database.g.dart';
 
@@ -48,6 +51,8 @@ part 'app_database.g.dart';
     ProductImagesTable,
     CatalogItemsTable,
     ProductCombosTable,
+    UsersTable,
+    SettingsTable,
   ],
 )
 class AppDatabase extends _$AppDatabase {
@@ -63,7 +68,7 @@ class AppDatabase extends _$AppDatabase {
   /// literalmente una migración nueva de Laravel, solo que escrita como
   /// código Dart en vez de un archivo `2026_09_29_add_column.php`.
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 21;
 
   /// Migraciones. REGLA: desde la versión 8 hay datos reales de negocio
   /// (ventas y caja), así que cada cambio de esquema debe escribirse como un
@@ -205,6 +210,35 @@ class AppDatabase extends _$AppDatabase {
               await m.addColumn(saleItemsTable, saleItemsTable.stockProductId);
               await m.addColumn(saleItemsTable, saleItemsTable.stockQuantity);
             }
+          }
+          if (from < 18) {
+            // Usuarios con PIN (admin / cajero) y quién cobró / anuló cada venta.
+            await m.createTable(usersTable);
+            // Antes de la v8 la tabla de ventas se crea arriba ya con estas columnas.
+            if (from >= 8) {
+              await m.addColumn(salesTable, salesTable.cashierName);
+              await m.addColumn(salesTable, salesTable.voidedBy);
+            }
+          }
+          if (from < 21) {
+            // Quién recibió cada abono. Antes de la v10 la tabla de clientes se
+            // crea arriba ya con esta columna.
+            if (from >= 10) {
+              await m.addColumn(customerMovementsTable, customerMovementsTable.receivedBy);
+            }
+          }
+          if (from < 20) {
+            // Quién abrió / cerró cada turno y quién hizo cada retiro o ingreso.
+            // Antes de la v8 las tablas de caja se crean arriba ya con estas columnas.
+            if (from >= 8) {
+              await m.addColumn(cashSessionsTable, cashSessionsTable.openedBy);
+              await m.addColumn(cashSessionsTable, cashSessionsTable.closedBy);
+              await m.addColumn(cashMovementsTable, cashMovementsTable.createdBy);
+            }
+          }
+          if (from < 19) {
+            // Datos del negocio (nombre...), clave por clave.
+            await m.createTable(settingsTable);
           }
         },
         beforeOpen: (details) async {

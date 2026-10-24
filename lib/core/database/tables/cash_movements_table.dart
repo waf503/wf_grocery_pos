@@ -23,6 +23,10 @@ class CashMovementsTable extends Table {
   DateTimeColumn get createdAt => dateTime()();
   TextColumn get saleId => text().nullable().references(SalesTable, #id)();
 
+  /// Quién hizo el ingreso o retiro manual (nulo en el resto y en lo anterior
+  /// a los usuarios).
+  TextColumn get createdBy => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

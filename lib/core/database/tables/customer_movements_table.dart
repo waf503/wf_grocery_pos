@@ -23,6 +23,10 @@ class CustomerMovementsTable extends Table {
   TextColumn get note => text()();
   DateTimeColumn get createdAt => dateTime()();
 
+  /// Quién recibió el abono (foto del nombre; nulo en cargos, reversas y en lo
+  /// anterior a los usuarios).
+  TextColumn get receivedBy => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

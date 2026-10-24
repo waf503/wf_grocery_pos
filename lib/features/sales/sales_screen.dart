@@ -6,7 +6,9 @@ import '../../models/sale.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/feedback_alert.dart';
 import '../../shared/widgets/section_header.dart';
+import '../../state/auth_provider.dart';
 import '../../state/cash_provider.dart';
+import '../auth/widgets/admin_pin_dialog.dart';
 import '../../state/sales_provider.dart';
 import 'data/sale_repository.dart';
 import 'widgets/sale_detail_dialog.dart';
@@ -124,12 +126,28 @@ class _SalesScreenState extends State<SalesScreen> {
     final reason = await showSaleDetailDialog(context, sale);
     if (reason == null || !mounted) return;
 
+    // Un cajero no anula por su cuenta: un administrador debe autorizar con su
+    // PIN, y queda registrado quién fue.
+    final auth = context.read<AuthProvider?>();
+    String? voidedBy = auth?.currentUser?.name;
+    if (auth != null && !auth.isAdmin) {
+      final admin = await showAdminPinDialog(
+        context,
+        title: 'Autorizar anulación',
+        message: 'Para anular la venta ${sale.receiptNumber} se necesita el PIN de un administrador.',
+      );
+      if (admin == null || !mounted) return;
+      voidedBy = admin.name;
+    }
+
+    if (!mounted) return;
     final cashSessionId = context.read<CashProvider>().current?.id;
     try {
       await context.read<SalesProvider>().voidSale(
             saleId: sale.id,
             reason: reason,
             cashSessionId: cashSessionId,
+            voidedBy: voidedBy,
           );
     } on CashSessionClosedException {
       if (!mounted) return;

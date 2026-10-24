@@ -28,7 +28,7 @@ abstract class CashRepository {
 
   /// Abre la caja con un fondo inicial (en centavos). Lanza
   /// [CashSessionAlreadyOpenException] si ya hay una abierta.
-  Future<CashSession> open({required int openingCents});
+  Future<CashSession> open({required int openingCents, String? openedBy});
 
   /// Ingreso o retiro manual de efectivo en la sesión indicada. Las ventas
   /// NO se registran aquí: las crea `SaleRepository.registerSale`. Un retiro
@@ -39,12 +39,17 @@ abstract class CashRepository {
     required CashMovementType type,
     required int amountCents,
     required String note,
+    String? createdBy,
   });
 
   /// Cierra la sesión guardando el efectivo contado físicamente y devuelve
   /// la sesión ya cerrada (con su diferencia). Lanza
   /// [CashSessionNotOpenException] si ya estaba cerrada.
-  Future<CashSession> close({required String sessionId, required int countedCents});
+  Future<CashSession> close({
+    required String sessionId,
+    required int countedCents,
+    String? closedBy,
+  });
 
   /// Turnos ya cerrados con sus movimientos, del más reciente al más antiguo.
   Stream<List<CashSession>> watchClosed({int limit = 200});

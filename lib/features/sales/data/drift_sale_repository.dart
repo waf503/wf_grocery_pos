@@ -58,6 +58,7 @@ class DriftSaleRepository implements SaleRepository {
     required PaymentMethod paymentMethod,
     String? customerId,
     String? customerName,
+    String? cashierName,
     int? tenderedCents,
   }) {
     if (lines.isEmpty) throw ArgumentError('Una venta necesita al menos un renglón.');
@@ -149,6 +150,7 @@ class DriftSaleRepository implements SaleRepository {
               sessionId: sessionId,
               customerId: Value(customerId),
               customerName: Value(customerName),
+              cashierName: Value(cashierName),
               paymentMethod: paymentMethod,
               totalCents: totalCents,
               createdAt: now,
@@ -241,6 +243,7 @@ class DriftSaleRepository implements SaleRepository {
     required String saleId,
     required String reason,
     String? cashSessionId,
+    String? voidedBy,
   }) {
     return _db.transaction(() async {
       final sale = await (_db.select(_db.salesTable)..where((row) => row.id.equals(saleId)))
@@ -310,6 +313,7 @@ class DriftSaleRepository implements SaleRepository {
           status: const Value(SaleStatus.voided),
           voidedAt: Value(now),
           voidReason: Value(reason),
+          voidedBy: Value(voidedBy),
         ),
       );
     });
@@ -329,6 +333,8 @@ class DriftSaleRepository implements SaleRepository {
       voidReason: sale.voidReason,
       tenderedCents: sale.tenderedCents,
       changeCents: sale.changeCents,
+      cashierName: sale.cashierName,
+      voidedBy: sale.voidedBy,
       items: [
         for (final item in items)
           SaleItem(

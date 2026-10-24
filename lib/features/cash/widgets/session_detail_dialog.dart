@@ -31,6 +31,14 @@ Future<void> showSessionDetailDialog(
                 '${session.closedAt != null ? '  ·  Cerrada ${dateTimeFormat.format(session.closedAt!)}' : ''}',
                 style: Theme.of(context).textTheme.bodySmall,
               ),
+              if (session.openedBy != null || session.closedBy != null)
+                Text(
+                  [
+                    if (session.openedBy != null) 'Abrió: ${session.openedBy}',
+                    if (session.closedBy != null) 'Cerró: ${session.closedBy}',
+                  ].join('  ·  '),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
               const SizedBox(height: 12),
               SessionBreakdown(session: session),
               const SizedBox(height: 16),
@@ -41,7 +49,10 @@ Future<void> showSessionDetailDialog(
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('Ventas por método de pago', style: Theme.of(context).textTheme.titleSmall),
+                      Text(
+                        'Ventas por método de pago',
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
                       const SizedBox(height: 8),
                       PaymentMethodSummary(sales: sales),
                       const Divider(),
@@ -51,22 +62,32 @@ Future<void> showSessionDetailDialog(
                 },
               ),
               const SizedBox(height: 16),
-              Text('Movimientos (${session.movements.length})', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                'Movimientos (${session.movements.length})',
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
               const SizedBox(height: 4),
               if (session.movements.isEmpty)
-                const Padding(padding: EdgeInsets.symmetric(vertical: 8), child: Text('Sin movimientos.'))
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('Sin movimientos.'),
+                )
               else
                 for (final m in session.movements)
                   ListTile(
                     dense: true,
                     contentPadding: EdgeInsets.zero,
                     title: Text('${m.type.label} · ${m.note}'),
-                    subtitle: Text(dateTimeFormat.format(m.time)),
+                    subtitle: Text(
+                      '${dateTimeFormat.format(m.time)}${m.createdBy != null ? ' · ${m.createdBy}' : ''}',
+                    ),
                     trailing: Text(
                       '${m.type.isOutflow ? '-' : '+'}${formatCurrency(m.amount)}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: m.type.isOutflow ? Theme.of(context).colorScheme.error : Colors.green.shade700,
+                        color: m.type.isOutflow
+                            ? Theme.of(context).colorScheme.error
+                            : Colors.green.shade700,
                       ),
                     ),
                   ),
@@ -75,7 +96,10 @@ Future<void> showSessionDetailDialog(
         ),
       ),
       actions: [
-        FilledButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cerrar')),
+        FilledButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cerrar'),
+        ),
       ],
     ),
   );

@@ -6,6 +6,7 @@ import '../../models/customer.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/feedback_alert.dart';
 import '../../shared/widgets/section_header.dart';
+import '../../state/auth_provider.dart';
 import '../../state/cash_provider.dart';
 import '../../state/customer_provider.dart';
 import 'data/customer_repository.dart';
@@ -39,6 +40,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _registerPayment(CustomerProvider provider, Customer customer) async {
     final cashSession = context.read<CashProvider>().current;
+    final receivedBy = context.read<AuthProvider?>()?.currentUser?.name;
     final payment = await showPaymentDialog(context, customer: customer, cashOpen: cashSession != null);
     if (payment == null) return;
     try {
@@ -46,6 +48,7 @@ class _CustomersScreenState extends State<CustomersScreen> {
         customerId: customer.id,
         amountCents: payment.amountCents,
         cashSessionId: payment.inCash ? cashSession?.id : null,
+        receivedBy: receivedBy,
       );
     } on PaymentExceedsBalanceException {
       if (!mounted) return;

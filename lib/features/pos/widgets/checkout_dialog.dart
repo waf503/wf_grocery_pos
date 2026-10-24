@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../../../core/format/formatters.dart';
 import '../../../core/format/money_input.dart';
 import '../../../core/money.dart';
+import 'package:provider/provider.dart';
+
 import '../../../models/sale.dart';
+import '../../printing/print_service.dart';
+import '../../printing/ticket_preview_dialog.dart';
 
 /// Lo que el cajero eligió al cobrar: la forma de pago y, si es efectivo, lo
 /// que entregó el cliente en centavos (nulo = pagó exacto).
@@ -18,6 +22,10 @@ const _largeBills = [5000, 10000];
 /// Texto del atajo: monedas en centavos ("25¢") y el resto en dólares ("\$5").
 String _denominationLabel(int cents) => cents < 100 ? '$cents¢' : '\$${cents ~/ 100}';
 
+/// Resultado del cobro con la opción de saltarse la revisión: la forma de pago
+/// elegida y si el vendedor pidió registrar la venta SIN revisarla.
+typedef PaymentOutcome = ({PaymentChoice choice, bool skipReview});
+
 /// [initial] reabre el cobro con la forma de pago y el efectivo que ya se había
 /// escrito (cuando el vendedor vuelve desde la revisión a corregirlos).
 Future<PaymentChoice?> showPaymentMethodDialog(
@@ -25,19 +33,44 @@ Future<PaymentChoice?> showPaymentMethodDialog(
   required double total,
   String? customerName,
   PaymentChoice? initial,
+}) async {
+  final outcome = await showPaymentDialog(context, total: total, customerName: customerName, initial: initial);
+  return outcome?.choice;
+}
+
+/// Igual que [showPaymentMethodDialog], pero si [skipReviewUpToCents] no es
+/// nulo y la venta no lo supera, ofrece también "Cobrar sin revisar": para
+/// ventas pequeñas donde revisar el ticket no hace falta.
+Future<PaymentOutcome?> showPaymentDialog(
+  BuildContext context, {
+  required double total,
+  String? customerName,
+  PaymentChoice? initial,
+  int? skipReviewUpToCents,
 }) {
-  return showDialog<PaymentChoice>(
+  return showDialog<PaymentOutcome>(
     context: context,
-    builder: (context) => _PaymentMethodDialog(total: total, customerName: customerName, initial: initial),
+    builder: (context) => _PaymentMethodDialog(
+      total: total,
+      customerName: customerName,
+      initial: initial,
+      skipReviewUpToCents: skipReviewUpToCents,
+    ),
   );
 }
 
 class _PaymentMethodDialog extends StatefulWidget {
-  const _PaymentMethodDialog({required this.total, this.customerName, this.initial});
+  const _PaymentMethodDialog({
+    required this.total,
+    this.customerName,
+    this.initial,
+    this.skipReviewUpToCents,
+  });
 
   final double total;
   final String? customerName;
   final PaymentChoice? initial;
+  final int? skipReviewUpToCents;
 
   @override
   State<_PaymentMethodDialog> createState() => _PaymentMethodDialogState();
@@ -78,12 +111,18 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
     super.dispose();
   }
 
-  void _confirm() {
+  /// "Cobrar sin revisar" solo se ofrece en ventas pequeñas (hasta el tope).
+  bool get _canSkipReview => widget.skipReviewUpToCents != null && _totalCents <= widget.skipReviewUpToCents!;
+
+  void _confirm({bool skipReview = false}) {
     if (_insufficient) return;
     Navigator.of(context).pop((
-      method: _selected,
-      // Vacío o igual al total = pagó exacto: no se guarda un monto aparte.
-      tenderedCents: _isCash ? _receivedCents : null,
+      choice: (
+        method: _selected,
+        // Vacío o igual al total = pagó exacto: no se guarda un monto aparte.
+        tenderedCents: _isCash ? _receivedCents : null,
+      ),
+      skipReview: skipReview,
     ));
   }
 
@@ -211,6 +250,11 @@ class _PaymentMethodDialogState extends State<_PaymentMethodDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
+        if (_canSkipReview)
+          OutlinedButton(
+            onPressed: _insufficient ? null : () => _confirm(skipReview: true),
+            child: const Text('Cobrar sin revisar'),
+          ),
         FilledButton(
           onPressed: _insufficient ? null : _confirm,
           child: const Text('Revisar venta'),
@@ -288,6 +332,12 @@ Future<void> showReceiptDialog(BuildContext context, Sale sale) {
         ),
       ),
       actions: [
+        if (context.read<PrintService?>() != null)
+          TextButton.icon(
+            onPressed: () => showSaleTicket(context, sale),
+            icon: const Icon(Icons.receipt_long_outlined),
+            label: const Text('Ver ticket'),
+          ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Listo'),

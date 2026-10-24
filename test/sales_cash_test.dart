@@ -68,6 +68,13 @@ Future<void> _revertToV9Sales(AppDatabase db) async {
   await db.customStatement('ALTER TABLE sales DROP COLUMN change_cents');
   await db.customStatement('ALTER TABLE sale_items DROP COLUMN stock_product_id');
   await db.customStatement('ALTER TABLE sale_items DROP COLUMN stock_quantity');
+  await db.customStatement('DROP TABLE users');
+  await db.customStatement('DROP TABLE settings');
+  await db.customStatement('ALTER TABLE cash_sessions DROP COLUMN opened_by');
+  await db.customStatement('ALTER TABLE cash_sessions DROP COLUMN closed_by');
+  await db.customStatement('ALTER TABLE cash_movements DROP COLUMN created_by');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN cashier_name');
+  await db.customStatement('ALTER TABLE sales DROP COLUMN voided_by');
 }
 
 void main() {
@@ -287,6 +294,8 @@ void main() {
         await seeded.customStatement('DROP TABLE $table');
       }
       await seeded.customStatement('ALTER TABLE units DROP COLUMN sale_step');
+      await seeded.customStatement('DROP TABLE users');
+      await seeded.customStatement('DROP TABLE settings');
       await seeded.customStatement('PRAGMA user_version = 7');
       await seeded.close();
 

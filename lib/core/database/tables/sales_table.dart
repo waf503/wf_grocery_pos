@@ -38,6 +38,11 @@ class SalesTable extends Table {
   IntColumn get tenderedCents => integer().nullable()();
   IntColumn get changeCents => integer().nullable()();
 
+  /// Foto del nombre de quien cobró y de quien anuló (en un cajero, el admin
+  /// que autorizó con su PIN). Nulos en ventas anteriores a los usuarios.
+  TextColumn get cashierName => text().nullable()();
+  TextColumn get voidedBy => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 }

@@ -15,5 +15,7 @@ Future<void> main() async {
   // real empieza vacío (el catálogo de ejemplo solo se usa en las pruebas).
   await seedInitialCatalogIfEmpty(database);
 
+  // Los usuarios (admin / cajero) se crean desde la app: en el primer arranque
+  // pide crear al administrador; no hay usuario ni PIN de fábrica.
   runApp(GroceryPosApp(database: database));
 }

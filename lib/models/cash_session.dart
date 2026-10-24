@@ -38,6 +38,7 @@ class CashMovement {
     required this.amountCents,
     required this.note,
     required this.time,
+    this.createdBy,
   });
 
   final String id;
@@ -45,6 +46,9 @@ class CashMovement {
   final int amountCents;
   final String note;
   final DateTime time;
+
+  /// Quién lo registró (solo ingresos y retiros manuales).
+  final String? createdBy;
 
   double get amount => fromCents(amountCents);
 }
@@ -60,6 +64,8 @@ class CashSession {
     required this.movements,
     this.closedAt,
     this.closingCountedCents,
+    this.openedBy,
+    this.closedBy,
   });
 
   final String id;
@@ -68,6 +74,10 @@ class CashSession {
   final List<CashMovement> movements;
   final DateTime? closedAt;
   final int? closingCountedCents;
+
+  /// Quién abrió y quién cerró el turno.
+  final String? openedBy;
+  final String? closedBy;
 
   bool get isOpen => closedAt == null;
 

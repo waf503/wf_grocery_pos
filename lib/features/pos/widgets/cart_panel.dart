@@ -56,26 +56,51 @@ class _CartPanelState extends State<CartPanel> {
     _seenAddSerial = pos.addSerial;
     final activeId = pos.activeProductId;
     if (activeId == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(activeId, retries: 4));
+  }
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final rowContext = _rowKeys[activeId]?.currentContext;
-      if (!mounted || rowContext == null || !_scrollController.hasClients) return;
-      const duration = Duration(milliseconds: 220);
-      // Si está más abajo de lo que se ve, se alinea al final; si quedó más
-      // arriba, al comienzo. Si ya está a la vista, ninguna de las dos mueve nada.
-      Scrollable.ensureVisible(
-        rowContext,
-        duration: duration,
-        curve: Curves.easeOut,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtEnd,
-      );
-      Scrollable.ensureVisible(
-        rowContext,
-        duration: duration,
-        curve: Curves.easeOut,
-        alignmentPolicy: ScrollPositionAlignmentPolicy.keepVisibleAtStart,
-      );
-    });
+  void _reveal(String productId, {required int retries}) {
+    if (!mounted || !_scrollController.hasClients) return;
+    final rowContext = _rowKeys[productId]?.currentContext;
+
+    // La lista construye solo los renglones cercanos a lo que se ve: si el
+    // buscado aún no existe, se salta cerca de su lugar y se reintenta (la
+    // altura total es una estimación que se afina al ir construyendo renglones).
+    if (rowContext == null) {
+      if (retries <= 0) return;
+      final cart = context.read<PosProvider>().cart;
+      final index = cart.indexWhere((item) => item.product.id == productId);
+      if (index < 0) return;
+      final position = _scrollController.position;
+      final fraction = cart.length <= 1 ? 1.0 : index / (cart.length - 1);
+      _scrollController.jumpTo((position.maxScrollExtent * fraction).clamp(0.0, position.maxScrollExtent));
+      WidgetsBinding.instance.addPostFrameCallback((_) => _reveal(productId, retries: retries - 1));
+      return;
+    }
+
+    final row = rowContext.findRenderObject();
+    final viewport = Scrollable.maybeOf(rowContext)?.context.findRenderObject();
+    if (row is! RenderBox || viewport is! RenderBox || !row.hasSize || !viewport.hasSize) return;
+
+    // Posición del renglón dentro de lo que se ve de la lista.
+    final top = row.localToGlobal(Offset.zero, ancestor: viewport).dy;
+    final bottom = top + row.size.height;
+    // Se desplaza lo justo: al final si quedó abajo, al comienzo si quedó
+    // arriba, y nada si ya se ve completo.
+    final ScrollPositionAlignmentPolicy policy;
+    if (bottom > viewport.size.height) {
+      policy = ScrollPositionAlignmentPolicy.keepVisibleAtEnd;
+    } else if (top < 0) {
+      policy = ScrollPositionAlignmentPolicy.keepVisibleAtStart;
+    } else {
+      return;
+    }
+    Scrollable.ensureVisible(
+      rowContext,
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOut,
+      alignmentPolicy: policy,
+    );
   }
 
   @override

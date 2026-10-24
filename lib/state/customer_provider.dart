@@ -52,12 +52,14 @@ class CustomerProvider extends ChangeNotifier {
     required int amountCents,
     String? cashSessionId,
     String? note,
+    String? receivedBy,
   }) {
     return _repository.registerPayment(
       customerId: customerId,
       amountCents: amountCents,
       cashSessionId: cashSessionId,
       note: note,
+      receivedBy: receivedBy,
     );
   }
 

@@ -13,8 +13,12 @@ import 'package:wf_grocery_pos/features/categories/data/category_seeder.dart';
 import 'package:wf_grocery_pos/features/categories/data/drift_category_repository.dart';
 import 'package:wf_grocery_pos/features/customers/data/drift_customer_repository.dart';
 import 'package:wf_grocery_pos/features/pos/pos_screen.dart';
+import 'package:wf_grocery_pos/features/pos/widgets/cart_panel.dart';
 import 'package:wf_grocery_pos/features/products/data/drift_product_repository.dart';
+import 'package:wf_grocery_pos/features/printing/print_service.dart';
+import 'package:wf_grocery_pos/features/printing/printer_transport.dart';
 import 'package:wf_grocery_pos/features/sales/data/drift_sale_repository.dart';
+import 'package:wf_grocery_pos/features/settings/data/settings_repository.dart';
 import 'package:wf_grocery_pos/features/units/data/drift_unit_repository.dart';
 import 'package:wf_grocery_pos/features/units/data/unit_seeder.dart';
 import 'package:wf_grocery_pos/state/cash_provider.dart';
@@ -23,6 +27,7 @@ import 'package:wf_grocery_pos/state/customer_provider.dart';
 import 'package:wf_grocery_pos/state/inventory_provider.dart';
 import 'package:wf_grocery_pos/state/pos_provider.dart';
 import 'package:wf_grocery_pos/state/sales_provider.dart';
+import 'package:wf_grocery_pos/state/settings_provider.dart';
 import 'package:wf_grocery_pos/state/unit_provider.dart';
 
 /// Las pruebas usan una fuente de prueba muy ancha: los desbordes de diseño
@@ -34,6 +39,20 @@ void _ignoreOverflow() {
     original?.call(details);
   };
   addTearDown(() => FlutterError.onError = original);
+}
+
+/// Impresora falsa: guarda lo que le llega, o falla con [failWith].
+class _RecordingPrinter implements PrinterTransport {
+  _RecordingPrinter({this.failWith});
+
+  final PrintException? failWith;
+  final List<Uint8List> sent = [];
+
+  @override
+  Future<void> send(Uint8List data) async {
+    if (failWith != null) throw failWith!;
+    sent.add(data);
+  }
 }
 
 /// La base de la última pantalla montada (para comprobar qué se guardó).
@@ -54,11 +73,34 @@ Future<void> _teardown(WidgetTester tester) async {
 
 /// Monta el POS con una base en memoria que tiene una Oreo (pieza, 49 en
 /// stock, código 7702133009037) y una papa por libra.
-Future<PosProvider> _mountPos(WidgetTester tester, {bool withImages = false, bool withPacks = false, bool withInverse = false}) async {
+Future<PosProvider> _mountPos(
+  WidgetTester tester, {
+  bool withImages = false,
+  bool withPacks = false,
+  bool withInverse = false,
+
+  /// Tope (centavos) para "Cobrar sin revisar"; nulo = sin ajustes, no se ofrece.
+  int? skipReviewCents,
+
+  /// Impresora (falsa) conectada: se configura una en red y los tickets llegan aquí.
+  PrinterTransport? printerTransport,
+}) async {
   _ignoreOverflow();
   final db = AppDatabase.forTesting(NativeDatabase.memory());
   _db = db;
+  final settings = SettingsProvider(DriftSettingsRepository(db));
   await tester.runAsync(() async {
+    if (skipReviewCents != null) await settings.setSkipReviewLimitCents(skipReviewCents);
+    if (printerTransport != null) {
+      await settings.setPrinter(
+        mode: PrinterMode.network,
+        target: '192.168.1.50',
+        columns: 48,
+        accents: false,
+        autoPrint: true,
+        openDrawer: false,
+      );
+    }
     final categories = await seedCategoriesIfEmpty(db);
     final units = await seedUnitsIfEmpty(db);
     final photo = Uint8List.fromList(img.encodeJpg(img.Image(width: 300, height: 300), quality: 80));
@@ -145,6 +187,12 @@ Future<PosProvider> _mountPos(WidgetTester tester, {bool withImages = false, boo
         ChangeNotifierProvider(lazy: false, create: (_) => SalesProvider(DriftSaleRepository(db))),
         ChangeNotifierProvider(lazy: false, create: (_) => CashProvider(DriftCashRepository(db))),
         ChangeNotifierProvider<PosProvider>.value(value: pos),
+        if (skipReviewCents != null || printerTransport != null)
+          ChangeNotifierProvider<SettingsProvider>.value(value: settings),
+        if (printerTransport != null)
+          Provider<PrintService>.value(
+            value: PrintService(settings, transportFactory: (_, _) => printerTransport),
+          ),
       ],
       child: const MaterialApp(home: PosScreen()),
     ),
@@ -184,6 +232,8 @@ void main() {
     const long = 'Desodorante Nivea Derma Control tono uniforme roll on femenino - 50 ml';
     for (var i = 0; i < 12; i++) {
       pos.addGeneric(name: i == 11 ? long : 'Producto $i', priceCents: 100);
+      // El id de un producto genérico sale de la hora: que no se repita.
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 5)));
     }
     await _settle(tester);
 
@@ -191,8 +241,8 @@ void main() {
     expect(text.overflow, isNull); // sin "..."
     expect(text.maxLines, isNull);
     // El último agregado quedó a la vista dentro de la lista desplazable.
-    final rowBottom = tester.getBottomLeft(find.text(long)).dy;
-    expect(rowBottom, lessThanOrEqualTo(tester.view.physicalSize.height / tester.view.devicePixelRatio));
+    final list = find.descendant(of: find.byType(CartPanel), matching: find.byType(Scrollable));
+    expect(tester.getBottomLeft(find.text(long)).dy, lessThanOrEqualTo(tester.getBottomLeft(list.first).dy));
     await _teardown(tester);
   });
 
@@ -275,6 +325,89 @@ void main() {
     await _teardown(tester);
   });
 
+  group('impresión del ticket al vender', () {
+    /// Escanea 2 Oreo ($0.70) y cobra sin revisar con $5.00.
+    Future<void> sellTwoOreos(WidgetTester tester) async {
+      await _scan(tester, '7702133009037');
+      await _scan(tester, '7702133009037');
+      await tester.tap(find.text('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Efectivo recibido'), '5');
+      await tester.pump();
+      await tester.tap(find.text('Cobrar sin revisar'));
+      await _settle(tester);
+    }
+
+    testWidgets('al registrar la venta imprime el ticket solo', (tester) async {
+      final printer = _RecordingPrinter();
+      await _mountPos(tester, skipReviewCents: 500, printerTransport: printer);
+      await sellTwoOreos(tester);
+
+      expect(printer.sent, hasLength(1));
+      final ticket = String.fromCharCodes(printer.sent.single);
+      expect(ticket, contains('V-000001'));
+      expect(ticket, contains('Galleta Oreo 54 g'));
+      expect(ticket, contains(r'2 x $0.35'));
+      expect(ticket, contains('Vuelto'));
+      expect(find.text('Venta registrada'), findsOneWidget);
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('si la impresora falla la venta SÍ queda registrada y se avisa', (tester) async {
+      final printer = _RecordingPrinter(failWith: PrintException('No se pudo conectar con la impresora en 192.168.1.50:9100'));
+      final pos = await _mountPos(tester, skipReviewCents: 500, printerTransport: printer);
+      await sellTwoOreos(tester);
+
+      // La venta está guardada y el carrito vacío...
+      final sales = (await tester.runAsync(() => _db!.select(_db!.salesTable).get()))!;
+      expect(sales, hasLength(1));
+      expect(pos.cart, isEmpty);
+      // ...y el vendedor ve el aviso (y el recibo en pantalla).
+      expect(find.text('No se pudo imprimir el ticket'), findsOneWidget);
+      expect(find.text('Venta registrada'), findsOneWidget);
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 7)); // el aviso se retira solo
+      await _teardown(tester);
+    });
+
+    testWidgets('sin impresora configurada no intenta imprimir y la venta sigue igual', (tester) async {
+      await _mountPos(tester, skipReviewCents: 500);
+      await sellTwoOreos(tester);
+
+      expect(find.text('No se pudo imprimir el ticket'), findsNothing);
+      expect(find.text('Venta registrada'), findsOneWidget);
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('desde el recibo se puede ver el ticket y reimprimirlo', (tester) async {
+      final printer = _RecordingPrinter();
+      await _mountPos(tester, skipReviewCents: 500, printerTransport: printer);
+      await sellTwoOreos(tester);
+      expect(printer.sent, hasLength(1)); // el automático
+
+      await tester.tap(find.text('Ver ticket'));
+      await tester.pumpAndSettle();
+      expect(find.text('Ticket V-000001'), findsOneWidget);
+      expect(find.textContaining('Galleta Oreo 54 g'), findsWidgets);
+
+      await tester.tap(find.text('Imprimir'));
+      await _settle(tester);
+      expect(printer.sent, hasLength(2));
+
+      await tester.tap(find.text('Cerrar'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      await tester.pump(const Duration(seconds: 3)); // los avisos se retiran solos
+      await _teardown(tester);
+    });
+  });
+
   group('revisión de la venta antes de registrarla', () {
     Future<List<SalesTableData>> savedSales(WidgetTester tester) async =>
         (await tester.runAsync(() => _db!.select(_db!.salesTable).get()))!;
@@ -293,6 +426,84 @@ void main() {
       await tester.tap(find.text('Revisar venta'));
       await tester.pumpAndSettle();
     }
+
+    /// Escanea 2 Oreo ($0.70), abre el cobro y escribe el efectivo recibido.
+    Future<void> openPayment(WidgetTester tester, PosProvider pos) async {
+      await _scan(tester, '7702133009037');
+      await _scan(tester, '7702133009037');
+      await tester.tap(find.text('Cobrar'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Efectivo recibido'), '5');
+      await tester.pump();
+    }
+
+    testWidgets('venta pequeña: "Cobrar sin revisar" registra la venta sin pasar por la revisión', (tester) async {
+      final pos = await _mountPos(tester, skipReviewCents: 500);
+      await openPayment(tester, pos);
+
+      expect(find.text('Cobrar sin revisar'), findsOneWidget);
+      await tester.tap(find.text('Cobrar sin revisar'));
+      await _settle(tester);
+
+      // No hubo cuadro de revisión: la venta ya está guardada, con su vuelto.
+      expect(find.text('Confirmar venta'), findsNothing);
+      final sales = await savedSales(tester);
+      expect(sales, hasLength(1));
+      expect(sales.single.totalCents, 70);
+      expect(sales.single.tenderedCents, 500);
+      expect(sales.single.changeCents, 430);
+      expect(pos.cart, isEmpty);
+      // Se muestra el recibo y se cierra.
+      expect(find.text('Venta registrada'), findsOneWidget);
+      await tester.tap(find.text('Listo'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('"Revisar venta" sigue funcionando aunque se ofrezca cobrar sin revisar', (tester) async {
+      final pos = await _mountPos(tester, skipReviewCents: 500);
+      await openPayment(tester, pos);
+
+      await tester.tap(find.text('Revisar venta'));
+      await tester.pumpAndSettle();
+      expect(find.text('Confirmar venta'), findsOneWidget);
+      expect(await savedSales(tester), isEmpty);
+
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('una venta mayor al tope siempre se revisa (no se ofrece cobrar sin revisar)', (tester) async {
+      final pos = await _mountPos(tester, skipReviewCents: 50); // tope $0.50 < $0.70
+      await openPayment(tester, pos);
+
+      expect(find.text('Cobrar sin revisar'), findsNothing);
+      expect(find.text('Revisar venta'), findsOneWidget);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('con el tope en 0 la opción está desactivada', (tester) async {
+      final pos = await _mountPos(tester, skipReviewCents: 0);
+      await openPayment(tester, pos);
+
+      expect(find.text('Cobrar sin revisar'), findsNothing);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
+
+    testWidgets('sin ajustes del negocio no se ofrece (siempre se revisa)', (tester) async {
+      final pos = await _mountPos(tester);
+      await openPayment(tester, pos);
+
+      expect(find.text('Cobrar sin revisar'), findsNothing);
+      await tester.tap(find.text('Cancelar'));
+      await tester.pumpAndSettle();
+      await _teardown(tester);
+    });
 
     testWidgets('muestra el ticket completo y NO guarda nada hasta confirmar', (tester) async {
       final pos = await _mountPos(tester);

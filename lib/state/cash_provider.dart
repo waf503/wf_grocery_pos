@@ -25,11 +25,11 @@ class CashProvider extends ChangeNotifier {
   CashSession? get current => _current;
   bool get isOpen => _current?.isOpen ?? false;
 
-  Future<void> openSession(double openingAmount) async {
-    await _repository.open(openingCents: toCents(openingAmount));
+  Future<void> openSession(double openingAmount, {String? openedBy}) async {
+    await _repository.open(openingCents: toCents(openingAmount), openedBy: openedBy);
   }
 
-  Future<void> registerMovement(CashMovementType type, double amount, String note) async {
+  Future<void> registerMovement(CashMovementType type, double amount, String note, {String? createdBy}) async {
     final session = _current;
     if (session == null) return;
     await _repository.addMovement(
@@ -37,15 +37,20 @@ class CashProvider extends ChangeNotifier {
       type: type,
       amountCents: toCents(amount),
       note: note,
+      createdBy: createdBy,
     );
   }
 
   /// Cierra la caja y devuelve el turno cerrado (con su diferencia), o
   /// `null` si no había caja abierta.
-  Future<CashSession?> closeSession(double countedAmount) async {
+  Future<CashSession?> closeSession(double countedAmount, {String? closedBy}) async {
     final session = _current;
     if (session == null) return null;
-    return _repository.close(sessionId: session.id, countedCents: toCents(countedAmount));
+    return _repository.close(
+      sessionId: session.id,
+      countedCents: toCents(countedAmount),
+      closedBy: closedBy,
+    );
   }
 
   Stream<List<CashSession>> watchClosed() => _repository.watchClosed();

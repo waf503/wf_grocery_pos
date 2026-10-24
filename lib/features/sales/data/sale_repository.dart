@@ -113,6 +113,7 @@ abstract class SaleRepository {
     String? customerId,
     String? customerName,
     int? tenderedCents,
+    String? cashierName,
   });
 
   /// Anula una venta en una sola transacción: la marca como anulada con su
@@ -125,5 +126,6 @@ abstract class SaleRepository {
     required String saleId,
     required String reason,
     String? cashSessionId,
+    String? voidedBy,
   });
 }

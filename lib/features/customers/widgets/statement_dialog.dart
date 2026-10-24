@@ -56,7 +56,9 @@ class _StatementDialog extends StatelessWidget {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: Text('${m.type.label} · ${m.note}'),
-                        subtitle: Text(dateTimeFormat.format(m.date)),
+                        subtitle: Text(
+                          '${dateTimeFormat.format(m.date)}${m.receivedBy != null ? ' · recibió ${m.receivedBy}' : ''}',
+                        ),
                         trailing: Text(
                           '${isCharge ? '+' : '-'}${formatCurrency(m.amount)}',
                           style: TextStyle(

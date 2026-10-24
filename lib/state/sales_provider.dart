@@ -46,6 +46,7 @@ class SalesProvider extends ChangeNotifier {
     String? customerId,
     String? customerName,
     int? tenderedCents,
+    String? cashierName,
   }) {
     return _repository.registerSale(
       sessionId: sessionId,
@@ -54,11 +55,22 @@ class SalesProvider extends ChangeNotifier {
       customerId: customerId,
       customerName: customerName,
       tenderedCents: tenderedCents,
+      cashierName: cashierName,
     );
   }
 
-  Future<void> voidSale({required String saleId, required String reason, String? cashSessionId}) {
-    return _repository.voidSale(saleId: saleId, reason: reason, cashSessionId: cashSessionId);
+  Future<void> voidSale({
+    required String saleId,
+    required String reason,
+    String? cashSessionId,
+    String? voidedBy,
+  }) {
+    return _repository.voidSale(
+      saleId: saleId,
+      reason: reason,
+      cashSessionId: cashSessionId,
+      voidedBy: voidedBy,
+    );
   }
 
   bool _isSameDay(DateTime a, DateTime b) =>

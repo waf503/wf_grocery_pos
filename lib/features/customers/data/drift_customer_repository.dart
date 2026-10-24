@@ -89,6 +89,7 @@ class DriftCustomerRepository implements CustomerRepository {
                   note: row.note,
                   date: row.createdAt,
                   saleId: row.saleId,
+                  receivedBy: row.receivedBy,
                 ),
             ]);
   }
@@ -99,6 +100,7 @@ class DriftCustomerRepository implements CustomerRepository {
     required int amountCents,
     String? cashSessionId,
     String? note,
+    String? receivedBy,
   }) {
     if (amountCents <= 0) throw ArgumentError('El abono debe ser mayor a cero.');
 
@@ -117,6 +119,7 @@ class DriftCustomerRepository implements CustomerRepository {
               amountCents: amountCents,
               note: note ?? 'Abono',
               createdAt: now,
+              receivedBy: Value(receivedBy),
             ),
           );
 
@@ -132,6 +135,7 @@ class DriftCustomerRepository implements CustomerRepository {
                 amountCents: amountCents,
                 note: 'Abono de ${customer.name}',
                 createdAt: now,
+                createdBy: Value(receivedBy),
               ),
             );
       }

@@ -35,5 +35,6 @@ abstract class CustomerRepository {
     required int amountCents,
     String? cashSessionId,
     String? note,
+    String? receivedBy,
   });
 }

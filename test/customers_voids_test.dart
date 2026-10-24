@@ -260,6 +260,13 @@ void main() {
       await seeded.customStatement('ALTER TABLE products DROP COLUMN units_per_pack');
       await seeded.customStatement('ALTER TABLE sale_items DROP COLUMN stock_product_id');
       await seeded.customStatement('ALTER TABLE sale_items DROP COLUMN stock_quantity');
+      await seeded.customStatement('DROP TABLE users');
+      await seeded.customStatement('DROP TABLE settings');
+      await seeded.customStatement('ALTER TABLE cash_sessions DROP COLUMN opened_by');
+      await seeded.customStatement('ALTER TABLE cash_sessions DROP COLUMN closed_by');
+      await seeded.customStatement('ALTER TABLE cash_movements DROP COLUMN created_by');
+      await seeded.customStatement('ALTER TABLE sales DROP COLUMN cashier_name');
+      await seeded.customStatement('ALTER TABLE sales DROP COLUMN voided_by');
       await seeded.customStatement('PRAGMA user_version = 9');
       await seeded.close();
 

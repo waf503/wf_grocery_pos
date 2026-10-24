@@ -19,15 +19,25 @@ class SessionBreakdown extends StatelessWidget {
         _Row('Fondo inicial', session.openingAmount),
         // Las ventas en efectivo suman lo que ENTREGÓ el cliente; el vuelto
         // aparece aparte como salida. Sin vueltos es simplemente lo vendido.
-        _Row(session.changeCents > 0 ? 'Efectivo recibido en ventas' : 'Ventas en efectivo', session.salesTotal),
-        if (session.changeCents > 0) _Row('Vueltos entregados', -session.changeTotal),
+        _Row(
+          session.changeCents > 0
+              ? 'Efectivo recibido en ventas'
+              : 'Ventas en efectivo',
+          session.salesTotal,
+        ),
+        if (session.changeCents > 0)
+          _Row('Vueltos entregados', -session.changeTotal),
         if (session.depositsCents > 0) _Row('Ingresos', session.depositsTotal),
-        if (session.customerPaymentsCents > 0) _Row('Abonos de clientes', session.customerPaymentsTotal),
-        if (session.withdrawalsCents > 0) _Row('Retiros', -session.withdrawalsTotal),
-        if (session.voidsCents > 0) _Row('Devoluciones por anulación', -session.voidsTotal),
+        if (session.customerPaymentsCents > 0)
+          _Row('Abonos de clientes', session.customerPaymentsTotal),
+        if (session.withdrawalsCents > 0)
+          _Row('Retiros', -session.withdrawalsTotal),
+        if (session.voidsCents > 0)
+          _Row('Devoluciones por anulación', -session.voidsTotal),
         const Divider(),
         _Row('Total en caja', session.expectedAmount, bold: true),
-        if (session.closingCountedAmount != null) _Row('Contado', session.closingCountedAmount!, bold: true),
+        if (session.closingCountedAmount != null)
+          _Row('Contado', session.closingCountedAmount!, bold: true),
         if (difference != null) _DifferenceRow(difference: difference),
       ],
     );
@@ -44,13 +54,17 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = bold
-        ? Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)
+        ? Theme.of(context).textTheme.titleMedium
+              ?.copyWith(fontWeight: FontWeight.bold)
         : Theme.of(context).textTheme.bodyMedium;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [Text(label, style: style), Text(formatCurrency(value), style: style)],
+        children: [
+          Text(label, style: style),
+          Text(formatCurrency(value), style: style),
+        ],
       ),
     );
   }
@@ -66,16 +80,24 @@ class _DifferenceRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
     final isBalanced = difference == 0;
-    final label = isBalanced ? 'Caja cuadrada' : (difference > 0 ? 'Sobrante' : 'Faltante');
-    final color = isBalanced ? Colors.green.shade700 : (difference > 0 ? Colors.orange.shade800 : scheme.error);
-    final style = Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: color);
+    final label = isBalanced
+        ? 'Caja cuadrada'
+        : (difference > 0 ? 'Sobrante' : 'Faltante');
+    final color = isBalanced
+        ? Colors.green.shade700
+        : (difference > 0 ? Colors.orange.shade800 : scheme.error);
+    final style = Theme.of(context).textTheme.titleMedium
+        ?.copyWith(fontWeight: FontWeight.bold, color: color);
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: style),
-          Text(isBalanced ? formatCurrency(0) : formatCurrency(difference.abs()), style: style),
+          Text(
+            isBalanced ? formatCurrency(0) : formatCurrency(difference.abs()),
+            style: style,
+          ),
         ],
       ),
     );
